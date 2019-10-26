@@ -1,0 +1,538 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Kullback-Leibler Divergence Explained - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。\n\n个人认为，对一个概念进行学习，最终的目标就是要搞懂这个概念可以用来干什么。就比如KL，KL的值代表了什么，可以用来对什么东西进行度量。自己在网上也找到了两种不同的解释，个人认为都可取，所以将分别作介绍。在进行正式介绍KL之前，将对一些基本的概念做一些介绍进行铺垫。\n信息量和信息熵在信息论中，认为小概率事件所蕴含的信息量是更大的。举一个经典的例子，上午有一场国际的足球比赛，对阵双方分别是中国和巴西。然后下午，别人告诉了你巴西赢了，你可能会觉得这个人说了等于没说，因为巴西赢了这件事是一个大概率的事件。然而，如果被人告诉你赢的是中国队，你可能会觉得这个信息量有点大。\n基于此，信息量的定义应该与一个事件发生的概率大小成反比关系。在信息论中，信息量，或者被称为自信息量，被定义为：\n\nI(x) = -log_2P(x)针对一个系统，发生的事件可能有多种，针对上面的例子就有三种，分别是中国队赢、巴西队赢和两队打平。虽然中国队赢信息量很大，但这个事件发生的可能性也很小，所以这个信息量对于整个系统的描述并没有什么作用。通常，会计算一个系统中所有事件的信息量期望值，即信息熵：\n\nH(X)=\\sum_{k=1}^N-p_klog_2p_k信息熵代表了一个系统的不确定度。\n信息熵和编码假设上面所提到的中国和巴西队的足球比赛，巴西队赢球的概率是1/2，中国队赢球和打平的概率都是1/4，比赛需要连续比100天（场景纯属虚构）。如果一个记者需要将比赛的结果以二进制码的形式发布出去，且希望在100天中所用的二进制码个数最少，这就是一个对这三个结果如何编码的问题了。由于一共有三种结果，一个二进制位肯定无法完全将三种结果完全表示，在这里我们可以用1、01、00这三种方式表示三种结果。我们直觉上会觉得，1这个编码应该代表巴西队赢球这个信息，因为这个事件的概率比较大，有1/2，也就是说这个记者有50天只需要发一个一位的1就可以了。按这种编码方式，记者每天平均需要发送 $1/2  1 + 2  1/4 * 2 = 1.5$ 个二进制编码。\n其实我们还有其他的编码方式，比如用11、01、00也可以进行编码，但很明显，这样在100天中将需要发送更长的编码。而信息熵的结果就是所有编码方式中的平均编码长度的下限（这种下限不一定是能达到的）。\n交叉熵通过对比上一段中第一种方式的平均编码计算方式 $1/2  1 + 2  1/4  2 = 1.5$ 和信息熵的计算公式$H(X)=\\sum_{k=1}^N-p_klog_2p_k$ 发现，以某个事件结果的*信息量的大小作为编码长度将会是最优的编码方式（平均编码长度最短）。\n假如一个事件有四种结果，发生的概率分别是1/2、1/4、1/8、1/8.那么对这个事件结果最佳的编码长度便是1、2、3、3。最短的平均编码长度也就是这个事件所有结果的熵：\n\nH=1/2 * 1 + 1/4 *2 + 1/8 * 3 + 1/8*3 = 1.75但是如果有个人对这四个结果出现的概率并不是很清楚，他便假定这四个结果发生的概率都是一样的，即都是1/4，那么他对每个结果使用的编码长度都会是 $-log_21/4 = 2$ 。那么这个时候的平均编码长度就变为了：\n\n1/2 * log_24 + 1/4 *log_24 + 1/8 * log_24 + 1/8*log_24 = 2也就是说，这个人基于了一个非真实分布的概率去制定了一个编码的策略，这个策略最终会导致平均编码长度变长。其实，这也就是交叉熵的定义，假设真实的分布是p，非真实分布是q，那么用这个非真实分布的概率去制定编码长度，所用平均编码长度便是：\n\nH(p,q)=\\sum^N_{k=1}p_klog_2 \\cfrac{1}{q_k}上面的式子就是交叉熵的定义。\nKL散度（相对熵）使用真实概率去制定编码准则是最优策略（平均编码长度是信息熵），使用非真实分布去制定编码策略是次优策略（平均编码长度是交叉熵）。为了度量这两种策略之间的差异，便提出了相对熵（KL散度）。\n\n\\begin{align*}\nKL(p||q) &= H(p,q)- H(p)\\\\\n&=\\sum^N_{k=1}p_klog_2 \\cfrac{1}{q_k} - \\sum_{k=1}^Np_klog_2\\cfrac{1}{p_k} \\\\\n&=\\sum^N_{k=1}p_klog_2\\cfrac{p_k}{q_k}\n\\end{align*}这个结果表示的也就是如果 $p_k$ 对应了每个事件结果发生的概率，若用 $q_k$编码时，平均编码长度增加的比特数。\nKL散度的另一种用法在博客中，将KL散度作为了一种用更简单的概率分布去代表原始分布的时候信息的损失量。个人感觉也算是一个make sense的解释。\n一些有用的网址\nhttps://www.zhihu.com/question/41252833/answer/195901726\nhttps://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained\n\n","dateCreated":"2019-06-10T15:20:48+08:00","dateModified":"2019-06-26T09:16:54+08:00","datePublished":"2019-06-10T15:20:48+08:00","description":"虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。","headline":"Kullback-Leibler Divergence Explained","image":["cover.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/06/10/kl/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/06/10/kl/","keywords":"METRIC","thumbnailUrl":"cover.jpg"}</script>
+    <meta name="description" content="虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Kullback-Leibler Divergence Explained">
+<meta property="og:url" content="http://czy97.github.io/2019/06/10/kl/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-06-26T01:16:54.739Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kullback-Leibler Divergence Explained">
+<meta name="twitter:description" content="虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/06/10/kl/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/06/10/kl/cover.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/06/10/kl/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/06/10/kl/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/06/10/kl/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Kullback-Leibler Divergence Explained
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-06-10T15:20:48+08:00">
+	
+		    6月 10, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>虽然已经多次遇到KL散度，并通过查资料进行理解，但过一段时间又忘了，最后发现写下来才是记忆的最好方式。</p>
+<a id="more"></a>
+<p>个人认为，对一个概念进行学习，最终的目标就是要搞懂这个概念可以用来干什么。就比如KL，KL的值代表了什么，可以用来对什么东西进行度量。自己在网上也找到了<strong>两种</strong>不同的解释，个人认为都可取，所以将分别作介绍。在进行正式介绍KL之前，将对一些基本的概念做一些介绍进行铺垫。</p>
+<h1 id="信息量和信息熵"><a href="#信息量和信息熵" class="headerlink" title="信息量和信息熵"></a>信息量和信息熵</h1><p>在信息论中，认为小概率事件所蕴含的信息量是更大的。举一个经典的例子，上午有一场国际的足球比赛，对阵双方分别是中国和巴西。然后下午，别人告诉了你巴西赢了，你可能会觉得这个人说了等于没说，因为巴西赢了这件事是一个大概率的事件。然而，如果被人告诉你赢的是中国队，你可能会觉得这个信息量有点大。</p>
+<p>基于此，信息量的定义应该与一个事件发生的概率大小成反比关系。在信息论中，信息量，或者被称为自信息量，被定义为：</p>
+<script type="math/tex; mode=display">
+I(x) = -log_2P(x)</script><p>针对一个系统，发生的事件可能有多种，针对上面的例子就有三种，分别是中国队赢、巴西队赢和两队打平。虽然中国队赢信息量很大，但这个事件发生的可能性也很小，所以这个信息量对于整个系统的描述并没有什么作用。通常，会计算一个系统中所有事件的信息量期望值，即信息熵：</p>
+<script type="math/tex; mode=display">
+H(X)=\sum_{k=1}^N-p_klog_2p_k</script><p>信息熵代表了一个系统的<strong>不确定度</strong>。</p>
+<h1 id="信息熵和编码"><a href="#信息熵和编码" class="headerlink" title="信息熵和编码"></a>信息熵和编码</h1><p>假设上面所提到的中国和巴西队的足球比赛，巴西队赢球的概率是1/2，中国队赢球和打平的概率都是1/4，比赛需要连续比100天（场景纯属虚构）。如果一个记者需要将比赛的结果以二进制码的形式发布出去，且希望在100天中所用的二进制码个数最少，这就是一个对这三个结果如何编码的问题了。由于一共有三种结果，一个二进制位肯定无法完全将三种结果完全表示，在这里我们可以用1、01、00这三种方式表示三种结果。我们直觉上会觉得，1这个编码应该代表巴西队赢球这个信息，因为这个事件的概率比较大，有1/2，也就是说这个记者有50天只需要发一个一位的1就可以了。按这种编码方式，记者每天平均需要发送 $1/2 <em> 1 + 2 </em> 1/4 * 2 = 1.5$ 个二进制编码。</p>
+<p>其实我们还有其他的编码方式，比如用11、01、00也可以进行编码，但很明显，这样在100天中将需要发送更长的编码。而信息熵的结果就是所有编码方式中的平均编码长度的<strong>下限</strong>（这种下限不一定是能达到的）。</p>
+<h1 id="交叉熵"><a href="#交叉熵" class="headerlink" title="交叉熵"></a>交叉熵</h1><p>通过对比上一段中第一种方式的平均编码计算方式 $1/2 <em> 1 + 2 </em> 1/4 <em> 2 = 1.5$ 和信息熵的计算公式$H(X)=\sum_{k=1}^N-p_klog_2p_k$ 发现，以某个事件结果的<em>*信息量的大小</em></em>作为编码长度将会是最优的编码方式（平均编码长度最短）。</p>
+<p>假如一个事件有四种结果，发生的概率分别是1/2、1/4、1/8、1/8.那么对这个事件结果最佳的编码长度便是1、2、3、3。最短的平均编码长度也就是这个事件所有结果的熵：</p>
+<script type="math/tex; mode=display">
+H=1/2 * 1 + 1/4 *2 + 1/8 * 3 + 1/8*3 = 1.75</script><p>但是如果有个人对这四个结果出现的概率并不是很清楚，他便假定这四个结果发生的概率都是一样的，即都是1/4，那么他对每个结果使用的编码长度都会是 $-log_21/4 = 2$ 。那么这个时候的平均编码长度就变为了：</p>
+<script type="math/tex; mode=display">
+1/2 * log_24 + 1/4 *log_24 + 1/8 * log_24 + 1/8*log_24 = 2</script><p>也就是说，这个人基于了一个<strong>非真实分布</strong>的概率去制定了一个编码的策略，这个策略最终会导致平均编码长度变长。其实，这也就是交叉熵的定义，假设真实的分布是p，非真实分布是q，那么用这个非真实分布的概率去制定编码长度，所用平均编码长度便是：</p>
+<script type="math/tex; mode=display">
+H(p,q)=\sum^N_{k=1}p_klog_2 \cfrac{1}{q_k}</script><p>上面的式子就是交叉熵的定义。</p>
+<h1 id="KL散度（相对熵）"><a href="#KL散度（相对熵）" class="headerlink" title="KL散度（相对熵）"></a>KL散度（相对熵）</h1><p>使用真实概率去制定编码准则是最优策略（平均编码长度是信息熵），使用非真实分布去制定编码策略是次优策略（平均编码长度是交叉熵）。为了度量这两种策略之间的差异，便提出了相对熵（KL散度）。</p>
+<script type="math/tex; mode=display">
+\begin{align*}
+KL(p||q) &= H(p,q)- H(p)\\
+&=\sum^N_{k=1}p_klog_2 \cfrac{1}{q_k} - \sum_{k=1}^Np_klog_2\cfrac{1}{p_k} \\
+&=\sum^N_{k=1}p_klog_2\cfrac{p_k}{q_k}
+\end{align*}</script><p>这个结果表示的也就是如果 $p_k$ 对应了每个事件结果发生的概率，若用 $q_k$编码时，<strong>平均编码长度增加的比特数</strong>。</p>
+<h1 id="KL散度的另一种用法"><a href="#KL散度的另一种用法" class="headerlink" title="KL散度的另一种用法"></a>KL散度的另一种用法</h1><p>在<a href="https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained" target="_blank" rel="noopener">博客</a>中，将KL散度作为了一种用更简单的概率分布去代表原始分布的时候信息的损失量。个人感觉也算是一个make sense的解释。</p>
+<h3 id="一些有用的网址"><a href="#一些有用的网址" class="headerlink" title="一些有用的网址"></a>一些有用的网址</h3><ul>
+<li><a href="https://www.zhihu.com/question/41252833/answer/195901726" target="_blank" rel="noopener">https://www.zhihu.com/question/41252833/answer/195901726</a></li>
+<li><a href="https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained" target="_blank" rel="noopener">https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained</a></li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/METRIC/">METRIC</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/26/gan/" data-tooltip="Generative Adversarial Networks学习笔记" aria-label="PREVIOUS: Generative Adversarial Networks学习笔记">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/10/softmax/" data-tooltip="多种Softmax对比" aria-label="NEXT: 多种Softmax对比">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/06/10/kl/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/06/10/kl/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/06/10/kl/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/26/gan/" data-tooltip="Generative Adversarial Networks学习笔记" aria-label="PREVIOUS: Generative Adversarial Networks学习笔记">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/10/softmax/" data-tooltip="多种Softmax对比" aria-label="NEXT: 多种Softmax对比">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/06/10/kl/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/06/10/kl/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/06/10/kl/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/06/10/kl/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/06/10/kl/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/06/10/kl/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>
