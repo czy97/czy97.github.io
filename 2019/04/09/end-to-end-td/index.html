@@ -1,0 +1,554 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34; - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发\n\n前言传统的说话人验证任务，是由很多分立的模块组成的。比如最经典的i-vector模型，会分为i-vector训练和plda打分模型训练。本片论文的作者认为这是很不好的，因为这样的做法并没有直接奔着说话人验证最终的目标去。比如UBM-ivector模型并不是直接优化说话人验证任务的。GMM-UBM模型对帧级别的建模也许会忽略掉上下文的信息。\n基于以上原因，作者在本文提出了一个在训练阶段就直接去优化说话人验证任务中目标的模型框架。并在试验中对比了几种loss和模型框架的优劣性。\nBaseline系统本文所用的baseline系统是一个DNN加softmax的框架。作者认为baseline系统存在着以下的缺陷：\n\nDNN框架对于序列上下文的建模能力是有限的\nsoftmax的优化目标在于区分正确说话人和其他所有错误的说话人。作者认为这与说话人验证的最终评价指标不一致（说话人验证的时候是为了评判enroll和test是不是同一个人）。这种不一致可能会需要后续的各种启发式的得分norm之类的操作。\nsoftmax网络的计算复杂度，会随着说话人个数的增加而线性增加。所以说呢，softmax对于大数据并不是很友好。\n此外，因为要对每个人进行分类，softmax对于每个人的训练数据是有要求的。太少的话就无法学到这些特定人的权值和偏置了。\n\n总之，这一波分析感觉还是蛮有道理的嘛！！！\nEnd-To-End Speaker Verification既然上面的有这么多缺点，那就来解决喽。\n作者文章中提出了一个end-to-end的框架。所谓的end-to-end就是直接去解决说话人验证的问题。模仿人验证的最后阶段。模型像说话人验证所接受的输入一致，即N个enroll utterance和一个test utterance，并在模型的最后直接输出这属不属于同一个人。\n作者在文章中用了两种特征提取网络，一个是帧扩展输入的DNN，一个是lstm。\n作者在介绍这部分的时候提到了很重要的一点，就是说训练的时候输入的enroll utterance的数量应该尽量和测试的时候一致。因为往往来说，训练集中每个人对应的utterance是很多的，而我们在真正进行enroll 的时候，只会有几个utterance。作者在后面的实验中也证实了这种数据量一致性是多么的重要。\nExperiment\nFrame-Level vs. Utterance-Level Representation作者首先做了一个帧级别表达和utt级别表达的优劣：\n\n这里两个DNN的差别是这样的。上面的DNN接收帧级别的输入，下面的是做了帧扩展。\n\nSoftmax vs. End-to-End Loss两种loss的结果对比如下：\n\ntrain_2M是一个小规模的数据集，train_22M是一个更大规模的数据集。\n实验结论：\n\n由于softmax的优化准则和说话人验证不一致，后期的score norm很重要\n而end-to-end的loss在训练的过程就学习了一个全局阈值，后期的score norm几乎没有作用。\n\n而且作者发现，在train_2M数据集上如果用softmax模型去初始化end-to-end模型的话，会得到更好的结果。但是在更大的数据集train_22M上这种现象就没有了。\n\n\n   关于在训练的时候，应该用多少enroll的utterance去估计说话人的模型，作者也做了一个实验。结果如下：\n   \n   也就是在训练的时候，enroll的utterance个数为5为最佳，测试的时候enroll的平均utterance个数是6，可以看出当两者一直的时候是会有很大的提升的。\n\nFeedforward vs. Recurrent Neural Networks此外，作者还对比了前向网络和循环神经网络的结果：\n\n可以看出，lstm的效果是是会好很多的，但是lstm带来的模型复杂度也是很大的。\n其实，我在最近实验的时候发现，TDNN其实是可以替代lstm的，而且TDNN的训练难度和参数复杂度要远小于lstm，\n\n\n","dateCreated":"2019-04-09T14:35:57+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-04-09T14:35:57+08:00","description":"自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发","headline":"Paper reading:\"End-to-End Text-Dependent Speaker Verification\"","image":["cover.jpeg","cover.jpeg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/04/09/end-to-end-td/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/04/09/end-to-end-td/","keywords":"END-TO-END, LSTM, LOSS","thumbnailUrl":"cover.jpeg"}</script>
+    <meta name="description" content="自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Paper reading:&quot;End-to-End Text-Dependent Speaker Verification&quot;">
+<meta property="og:url" content="http://czy97.github.io/2019/04/09/end-to-end-td/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/frame_utt.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/loss.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/size.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/lstm.png">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.947Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Paper reading:&quot;End-to-End Text-Dependent Speaker Verification&quot;">
+<meta name="twitter:description" content="自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发">
+<meta name="twitter:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/frame_utt.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/cover.jpeg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/09/end-to-end-td/cover.jpeg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/09/end-to-end-td/cover.jpeg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/09/end-to-end-td/cover.jpeg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/04/09/end-to-end-td/cover.jpeg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-09T14:35:57+08:00">
+	
+		    4月 09, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/paperReading/">paperReading</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>自己在阅读这篇论文的时候，觉得这里面有很多有趣的观点。记录下来，希望能对自己以后的实验有所启发</p>
+<a id="more"></a>
+<h3 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h3><p>传统的说话人验证任务，是由很多分立的模块组成的。比如最经典的i-vector模型，会分为i-vector训练和<strong>plda打分模型</strong>训练。本片论文的作者认为这是很不好的，因为这样的做法并没有直接奔着<strong>说话人验证最终的目标</strong>去。比如UBM-ivector模型并不是<strong>直接</strong>优化说话人验证任务的。GMM-UBM模型对帧级别的建模也许会忽略掉上下文的信息。</p>
+<p>基于以上原因，作者在本文提出了一个在训练阶段就直接去优化说话人验证任务中目标的模型框架。并在试验中对比了几种loss和模型框架的优劣性。</p>
+<h3 id="Baseline系统"><a href="#Baseline系统" class="headerlink" title="Baseline系统"></a>Baseline系统</h3><p>本文所用的baseline系统是一个DNN加softmax的框架。作者认为baseline系统存在着以下的缺陷：</p>
+<ul>
+<li>DNN框架对于序列上下文的建模能力是有限的</li>
+<li>softmax的优化目标在于区分正确说话人和其他所有错误的说话人。作者认为这与说话人验证的最终评价指标<strong>不一致</strong>（说话人验证的时候是为了评判enroll和test是不是同一个人）。这种不一致可能会需要后续的各种启发式的得分norm之类的操作。</li>
+<li>softmax网络的计算复杂度，会随着说话人个数的增加而<strong>线性</strong>增加。所以说呢，softmax对于大数据并不是很友好。</li>
+<li>此外，因为要对每个人进行分类，softmax对于每个人的训练数据是有要求的。太少的话就无法学到这些特定人的权值和偏置了。</li>
+</ul>
+<p>总之，这一波分析感觉还是蛮有道理的嘛！！！</p>
+<h3 id="End-To-End-Speaker-Verification"><a href="#End-To-End-Speaker-Verification" class="headerlink" title="End-To-End Speaker Verification"></a>End-To-End Speaker Verification</h3><p>既然上面的有这么多缺点，那就来解决喽。</p>
+<p>作者文章中提出了一个end-to-end的框架。所谓的end-to-end就是<strong>直接去解决</strong>说话人验证的问题。模仿人验证的最后阶段。模型像说话人验证所接受的输入一致，即N个enroll utterance和一个test utterance，并在模型的最后直接输出这属不属于同一个人。</p>
+<p>作者在文章中用了两种特征提取网络，一个是帧扩展输入的DNN，一个是lstm。</p>
+<p>作者在介绍这部分的时候提到了很重要的一点，就是说训练的时候输入的enroll <strong>utterance的数量</strong>应该尽量和测试的时候一致。因为往往来说，训练集中每个人对应的utterance是很多的，而我们在真正进行enroll 的时候，只会有几个utterance。作者在后面的实验中也证实了这种<strong>数据量一致性</strong>是多么的重要。</p>
+<h3 id="Experiment"><a href="#Experiment" class="headerlink" title="Experiment"></a>Experiment</h3><ol>
+<li><h4 id="Frame-Level-vs-Utterance-Level-Representation"><a href="#Frame-Level-vs-Utterance-Level-Representation" class="headerlink" title="Frame-Level vs. Utterance-Level Representation"></a>Frame-Level vs. Utterance-Level Representation</h4><p>作者首先做了一个帧级别表达和utt级别表达的优劣：</p>
+<p><img src="/2019/04/09/end-to-end-td/frame_utt.png" alt="frame_utt"></p>
+<p>这里两个DNN的差别是这样的。上面的DNN接收帧级别的输入，下面的是做了帧扩展。</p>
+</li>
+<li><h4 id="Softmax-vs-End-to-End-Loss"><a href="#Softmax-vs-End-to-End-Loss" class="headerlink" title="Softmax vs. End-to-End Loss"></a>Softmax vs. End-to-End Loss</h4><p>两种loss的结果对比如下：</p>
+<p><img src="/2019/04/09/end-to-end-td/loss.png" alt="loss"></p>
+<p>train_2M是一个小规模的数据集，train_22M是一个更大规模的数据集。</p>
+<p>实验结论：</p>
+<ul>
+<li>由于softmax的优化准则和说话人验证不一致，后期的score norm很重要</li>
+<li>而end-to-end的loss在<strong>训练的过程</strong>就学习了一个全局阈值，后期的score norm几乎没有作用。</li>
+</ul>
+<p>而且作者发现，在train_2M数据集上如果用softmax模型去<strong>初始化</strong>end-to-end模型的话，会得到更好的结果。但是在更大的数据集train_22M上这种现象就没有了。</p>
+</li>
+</ol>
+<p>   关于在训练的时候，应该<strong>用多少enroll的utterance</strong>去估计说话人的模型，作者也做了一个实验。结果如下：</p>
+<p>   <img src="/2019/04/09/end-to-end-td/size.png" alt="size"></p>
+<p>   也就是在训练的时候，enroll的utterance个数为5为最佳，测试的时候enroll的平均utterance个数是6，可以看出当两者一直的时候是会有很大的提升的。</p>
+<ol>
+<li><h4 id="Feedforward-vs-Recurrent-Neural-Networks"><a href="#Feedforward-vs-Recurrent-Neural-Networks" class="headerlink" title="Feedforward vs. Recurrent Neural Networks"></a>Feedforward vs. Recurrent Neural Networks</h4><p>此外，作者还对比了前向网络和循环神经网络的结果：</p>
+<p><img src="/2019/04/09/end-to-end-td/lstm.png" alt="lstm"></p>
+<p>可以看出，lstm的效果是是会好很多的，但是lstm带来的<strong>模型复杂度</strong>也是很大的。</p>
+<p>其实，我在最近实验的时候发现，<strong>TDNN</strong>其实是可以替代lstm的，而且TDNN的训练难度和参数复杂度要远小于lstm，</p>
+</li>
+</ol>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/END-TO-END/">END-TO-END</a> <a class="tag tag--primary tag--small t-link" href="/tags/LOSS/">LOSS</a> <a class="tag tag--primary tag--small t-link" href="/tags/LSTM/">LSTM</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/19/python-multi/" data-tooltip="Python 多线程与多进程" aria-label="PREVIOUS: Python 多线程与多进程">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/23/RNN/" data-tooltip="RNN learning summary" aria-label="NEXT: RNN learning summary">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/19/python-multi/" data-tooltip="Python 多线程与多进程" aria-label="PREVIOUS: Python 多线程与多进程">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/23/RNN/" data-tooltip="RNN learning summary" aria-label="NEXT: RNN learning summary">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/09/end-to-end-td/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/09/end-to-end-td/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/09/end-to-end-td/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/09/end-to-end-td/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

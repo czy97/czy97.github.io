@@ -1,0 +1,545 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Pytorch Dataloader 学习笔记 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）\n\n首先我们先来看，pytorch dataloader接收的一些参数：\n1torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None, num_workers=0, collate_fn=&lt;function default_collate&gt;, pin_memory=False, drop_last=False, timeout=0, worker_init_fn=None)\ndataloader对于数据的读取延迟主要取决于num_workers和pin_memory这两个参数。首先，我先介绍一下比较简单的pin_memory参数。\n什么是pin_memory所谓的pin_memory就是锁页内存的意思。\n计算机为了运行程序会先将程序和数据读到内存里。一般来说，计算机的内存都是比较小的，很难存的下太多的数据。但是，某个程序在某个时间段所需的程序和数据往往是比较少的，也就是说在某个时间点我们不需要将一个程序所需要的所有资源都放在内存里。我们可以将这些暂时用不到的数据或程序存放在硬盘一个被称为虚拟内存的地方。在程序运行的时候，我们可以不断交换内存和虚拟内存的数据以减少内存所需存储的数据。而且这些交换往往是通过某些规律预测下个时刻程序会用到的数据和代码并提前交换至内存的，这些规律的使用以及预测的准确性将会影响到程序的速度。\n所谓的锁页内存就是说，我们不允许系统将某些内存里的数据交换至虚拟内存，毋庸置疑这将会提升程序的运行速度。但是也会是内存的存储占用消耗很多。\n（我自己没有测试pin_memory为true的时候速度的提升会有多大，只是原理性的理解了一下，我自己感觉影响应该不是特别大，有兴趣的可以试一下。）\nDataloader的多进程读数据细节Dataloader多进程读取数据的参数是通过num_workers指定的，num_workers为0的话就用主进程去读取数据，num_workers为N的话就会多开N个进程去读取数据。这里的多进程是通过python的multiprocessing module实现的（其实pytorch在multiprocessing又加了一个wraper以实现shared memory）。\n先借用源码中的流程图解释一下Dataloader读数据的整个流程：\n1234567891011121314#                main process                              ||#                     |                                    ||#               &#123;index_queue&#125;                              ||#                     |                                    ||#              worker processes                            ||     DATA#                     |                                    ||#            &#123;worker_result_queue&#125;                         ||     FLOW#                     |                                    ||#      pin_memory_thread of main process                   ||   DIRECTION#                     |                                    ||#               &#123;data_queue&#125;                               ||#                     |                                    ||#                data output                               \\/\n\n首先每个worker的进程会拥有一个index_queue，dataloader初始化的时候，每个worker的index_queue会放入两个batch的index。\n1234# dataloader初始化，共放入2 * self.num_workers个batch的index# 每个worker的index_queue获得两个batch的indexfor _ in range(2 * self.num_workers):\tself._put_indices()\nindex的放入是根据worker的id顺序放入的\n12345678910def _put_indices(self):\tassert self.batches_outstanding &lt; 2 * self.num_workers\tindices = next(self.sample_iter, None)\tif indices is None:\t\treturn\tself.index_queues[self.worker_queue_idx].put((self.send_idx, indices))    #index是根据worker的id顺序放入的，不会出现先放某个worker的情况\tself.worker_queue_idx = (self.worker_queue_idx + 1) % self.num_workers\tself.batches_outstanding += 1\tself.send_idx += 1\n\n\n\n每个worker的进程会不断检查自己的index_queue里有没有值，没有的话就继续检查。\n1234try:    r = index_queue.get(timeout=MP_STATUS_CHECK_INTERVAL)except queue.Empty:    continue\n有的话，就去读一个batch（这个读的过程是通过调用dataset的get_item()实现的，并通过函数将数据合并为一个batch）。放入所有worker共享的data_queue（如果指定了pin_memory，这个新加的batch是会被放入pin_memory的）\n1data_queue.put((idx, samples))\n\nDataloader会返回一个迭代器，每迭代一次\n首先程序会检查这次要load的idx数据是不是之前已经load过了（已经从共享的data_queue里取出来了），并事先放在一个字典里存起来了（为什么会load过，下面会解释），如果是的话，就直接拿来用\n1234# self.rcvd_idx是第几个batch的计数if self.rcvd_idx in self.reorder_dict:    batch = self.reorder_dict.pop(self.rcvd_idx)    return self._process_next_batch(batch)\n如果没有load过，就从data_queue获取下一个batch和相应的idx，但是这里从data_queue获得的batch可能不是按顺序的，因为有的worker可能比较快提前将它的数据读好放到data_queue里了。这时候我们将这个提前来的batch先保存到self.reorder_dict这个字典里面，这就解释了上面为什么会出现load过的问题。如果一直等不到我们就会一直将提前来的batch放入self.reorder_dict暂存，直至我们等到那个按顺序来的batch。\n123456789while True:\tassert (not self.shutdown and self.batches_outstanding &gt; 0)\tidx, batch = self._get_batch()\tself.batches_outstanding -= 1\tif idx != self.rcvd_idx:\t\t# store out-of-order samples\t\tself.reorder_dict[idx] = batch\t\tcontinue\treturn self._process_next_batch(batch)\n在每次迭代成功的时候，dataloader会放入一个新的batch_index到特定worker的index_queue里面：\n123456def _process_next_batch(self, batch):\tself.rcvd_idx += 1  #在返回数据的同时为当前的batch计数加一 \tself._put_indices() #在返回数据的同时放入新的index\tif isinstance(batch, ExceptionWrapper):\t\traise batch.exc_type(batch.exc_msg)\treturn batch\n可以看出，dataloader只会在每次迭代成功的时候才会放入新的index到index_queue里面。因为上面写了在初始化dataloader的时候，我们一共放了2 x self.num_workers个batch的index到index_queue。读了一个batch才会放新的batch，所以这所有的worker进程最多缓存的batch数量就是2 x self.num_workers个。\n\n\n那应该设定多少个worker呢？怎么说呢？自己试吧，太多太少都不好吧。\n太少，程序想去从data_queue里拿 batch的时候这个batch可能还没被读进来，会影响整个程序的运行时间。\n太多的话，每个进程都是要占cpu核的，核不够，并行就只能变成串行呗，那就相当于指定那么多worker就没什么用了呗，如果拥有较靠前index的那个worker一直被阻塞没将那个batch读进来，dataloader也会一直等待这个batch，反而会更慢。（这些都是我理论分析的，哈哈哈，不信的话就去实验验证吧，毕竟实践是检验真理的唯一标准(ಡωಡ)）\n","dateCreated":"2019-04-28T10:30:57+08:00","dateModified":"2019-10-26T15:48:10+08:00","datePublished":"2019-04-28T10:30:57+08:00","description":"前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）","headline":"Pytorch Dataloader 学习笔记","image":["cover.png","cover.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/04/28/pytorch-dataloader/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/04/28/pytorch-dataloader/","keywords":"PYTORCH","thumbnailUrl":"cover.png"}</script>
+    <meta name="description" content="前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Pytorch Dataloader 学习笔记">
+<meta property="og:url" content="http://czy97.github.io/2019/04/28/pytorch-dataloader/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-10-26T07:48:10.017Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Pytorch Dataloader 学习笔记">
+<meta name="twitter:description" content="前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/28/pytorch-dataloader/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/28/pytorch-dataloader/cover.png" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/28/pytorch-dataloader/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/28/pytorch-dataloader/cover.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/04/28/pytorch-dataloader/cover.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Pytorch Dataloader 学习笔记
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-28T10:30:57+08:00">
+	
+		    4月 28, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>前段时间，由于自己偶遇了一个关于pytorch dataset的bug，便顺便把pytorch dataloader的源码看了下，以了解pytorch dataloader并行读数据的原理。（本来不想做什么笔记来着，恰好今天闲来无事，就记一下吧）</p>
+<a id="more"></a>
+<p>首先我们先来看，pytorch dataloader接收的一些参数：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">torch.utils.data.DataLoader(dataset, batch_size=<span class="number">1</span>, shuffle=<span class="literal">False</span>, sampler=<span class="literal">None</span>, batch_sampler=<span class="literal">None</span>, num_workers=<span class="number">0</span>, collate_fn=&lt;function default_collate&gt;, pin_memory=<span class="literal">False</span>, drop_last=<span class="literal">False</span>, timeout=<span class="number">0</span>, worker_init_fn=<span class="literal">None</span>)</span><br></pre></td></tr></table></figure>
+<p>dataloader对于数据的读取延迟主要取决于<strong>num_workers</strong>和<strong>pin_memory</strong>这两个参数。首先，我先介绍一下比较简单的pin_memory参数。</p>
+<h3 id="什么是pin-memory"><a href="#什么是pin-memory" class="headerlink" title="什么是pin_memory"></a>什么是pin_memory</h3><p>所谓的pin_memory就是<strong>锁页内存</strong>的意思。</p>
+<p>计算机为了运行程序会先将程序和数据读到内存里。一般来说，计算机的内存都是比较小的，很难存的下太多的数据。但是，某个程序在某个时间段所需的程序和数据往往是比较少的，也就是说在<strong>某个时间</strong>点我们不需要将一个程序所需要的所有资源都放在内存里。我们可以将这些<strong>暂时</strong>用不到的数据或程序存放在硬盘一个被称为<strong>虚拟内存</strong>的地方。在程序运行的时候，我们可以<strong>不断交换</strong>内存和虚拟内存的数据以减少内存所需存储的数据。而且这些交换往往是通过<strong>某些规律</strong>预测下个时刻程序会用到的数据和代码并<strong>提前</strong>交换至内存的，这些规律的使用以及预测的准确性将会影响到程序的速度。</p>
+<p>所谓的锁页内存就是说，我们<strong>不允许</strong>系统将某些内存里的数据交换至虚拟内存，毋庸置疑这将会提升程序的运行速度。但是也会是内存的存储占用消耗很多。</p>
+<p>（我自己没有测试pin_memory为true的时候速度的提升会有多大，只是原理性的理解了一下，我自己感觉影响应该不是特别大，有兴趣的可以试一下。）</p>
+<h3 id="Dataloader的多进程读数据细节"><a href="#Dataloader的多进程读数据细节" class="headerlink" title="Dataloader的多进程读数据细节"></a>Dataloader的多进程读数据细节</h3><p>Dataloader多进程读取数据的参数是通过<strong>num_workers</strong>指定的，num_workers为0的话就用<strong>主进程</strong>去读取数据，num_workers为N的话就会多开N个进程去读取数据。这里的多进程是通过python的multiprocessing module实现的（其实pytorch在multiprocessing又加了一个wraper以实现<strong>shared memory</strong>）。</p>
+<p>先借用源码中的流程图解释一下Dataloader读数据的整个流程：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="comment">#                main process                              ||</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#               &#123;index_queue&#125;                              ||</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#              worker processes                            ||     DATA</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#            &#123;worker_result_queue&#125;                         ||     FLOW</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#      pin_memory_thread of main process                   ||   DIRECTION</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#               &#123;data_queue&#125;                               ||</span></span><br><span class="line"><span class="comment">#                     |                                    ||</span></span><br><span class="line"><span class="comment">#                data output                               \/</span></span><br></pre></td></tr></table></figure>
+<ol>
+<li><p>首先每个worker的进程会拥有一个index_queue，dataloader初始化的时候，每个worker的index_queue会放入<strong>两个</strong>batch的index。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># dataloader初始化，共放入2 * self.num_workers个batch的index</span></span><br><span class="line"><span class="comment"># 每个worker的index_queue获得两个batch的index</span></span><br><span class="line"><span class="keyword">for</span> _ <span class="keyword">in</span> range(<span class="number">2</span> * self.num_workers):</span><br><span class="line">	self._put_indices()</span><br></pre></td></tr></table></figure>
+<p>index的放入是根据worker的id<strong>顺序放入</strong>的</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_put_indices</span><span class="params">(self)</span>:</span></span><br><span class="line">	<span class="keyword">assert</span> self.batches_outstanding &lt; <span class="number">2</span> * self.num_workers</span><br><span class="line">	indices = next(self.sample_iter, <span class="literal">None</span>)</span><br><span class="line">	<span class="keyword">if</span> indices <span class="keyword">is</span> <span class="literal">None</span>:</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	self.index_queues[self.worker_queue_idx].put((self.send_idx, indices))</span><br><span class="line">    <span class="comment">#index是根据worker的id顺序放入的，不会出现先放某个worker的情况</span></span><br><span class="line">	self.worker_queue_idx = (self.worker_queue_idx + <span class="number">1</span>) % self.num_workers</span><br><span class="line">	self.batches_outstanding += <span class="number">1</span></span><br><span class="line">	self.send_idx += <span class="number">1</span></span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<ol>
+<li><p>每个worker的进程会不断检查自己的index_queue里有没有值，没有的话就继续检查。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">try</span>:</span><br><span class="line">    r = index_queue.get(timeout=MP_STATUS_CHECK_INTERVAL)</span><br><span class="line"><span class="keyword">except</span> queue.Empty:</span><br><span class="line">    <span class="keyword">continue</span></span><br></pre></td></tr></table></figure>
+<p>有的话，就去读一个batch（这个读的过程是通过调用dataset的<strong>get_item()</strong>实现的，并通过函数将数据合并为一个batch）。放入<strong>所有worker共享</strong>的data_queue（如果指定了pin_memory，这个新加的batch是会被放入pin_memory的）</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">data_queue.put((idx, samples))</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>Dataloader会返回一个<strong>迭代器</strong>，每迭代一次</p>
+<p>首先程序会检查这次要load的idx数据是不是之前<strong>已经load过了</strong>（已经从共享的data_queue里取出来了），<strong>并</strong>事先放在一个<strong>字典里存起来了</strong>（为什么会load过，下面会解释），如果是的话，就直接拿来用</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># self.rcvd_idx是第几个batch的计数</span></span><br><span class="line"><span class="keyword">if</span> self.rcvd_idx <span class="keyword">in</span> self.reorder_dict:</span><br><span class="line">    batch = self.reorder_dict.pop(self.rcvd_idx)</span><br><span class="line">    <span class="keyword">return</span> self._process_next_batch(batch)</span><br></pre></td></tr></table></figure>
+<p>如果没有load过，就从data_queue获取下一个batch和相应的idx，但是这里从data_queue获得的batch可能<strong>不是按顺序</strong>的，因为有的worker可能比较快提前将它的数据读好放到data_queue里了。这时候我们将这个提前来的batch先保存到self.reorder_dict这个字典里面，这就解释了上面为什么会出现load过的问题。如果一直等不到我们就会一直将提前来的batch放入self.reorder_dict暂存，直至我们等到那个<strong>按顺序来</strong>的batch。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">while</span> <span class="literal">True</span>:</span><br><span class="line">	<span class="keyword">assert</span> (<span class="keyword">not</span> self.shutdown <span class="keyword">and</span> self.batches_outstanding &gt; <span class="number">0</span>)</span><br><span class="line">	idx, batch = self._get_batch()</span><br><span class="line">	self.batches_outstanding -= <span class="number">1</span></span><br><span class="line">	<span class="keyword">if</span> idx != self.rcvd_idx:</span><br><span class="line">		<span class="comment"># store out-of-order samples</span></span><br><span class="line">		self.reorder_dict[idx] = batch</span><br><span class="line">		<span class="keyword">continue</span></span><br><span class="line">	<span class="keyword">return</span> self._process_next_batch(batch)</span><br></pre></td></tr></table></figure>
+<p>在每次迭代成功的时候，dataloader会放入一个新的batch_index到特定worker的index_queue里面：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">_process_next_batch</span><span class="params">(self, batch)</span>:</span></span><br><span class="line">	self.rcvd_idx += <span class="number">1</span>  <span class="comment">#在返回数据的同时为当前的batch计数加一 </span></span><br><span class="line">	self._put_indices() <span class="comment">#在返回数据的同时放入新的index</span></span><br><span class="line">	<span class="keyword">if</span> isinstance(batch, ExceptionWrapper):</span><br><span class="line">		<span class="keyword">raise</span> batch.exc_type(batch.exc_msg)</span><br><span class="line">	<span class="keyword">return</span> batch</span><br></pre></td></tr></table></figure>
+<p>可以看出，dataloader只会在每次迭代成功的时候才会放入新的index到index_queue里面。因为上面写了在初始化dataloader的时候，我们一共放了2 x self.num_workers个batch的index到index_queue。读了一个batch才会放新的batch，所以这所有的worker进程<strong>最多缓存的batch数量</strong>就是2 x self.num_workers个。</p>
+</li>
+</ol>
+<h3 id="那应该设定多少个worker呢？"><a href="#那应该设定多少个worker呢？" class="headerlink" title="那应该设定多少个worker呢？"></a>那应该设定多少个worker呢？</h3><p>怎么说呢？自己试吧，太多太少都不好吧。</p>
+<p>太少，程序想去从data_queue里拿 batch的时候这个batch可能还没被读进来，会影响整个程序的运行时间。</p>
+<p>太多的话，每个进程都是要占cpu核的，核不够，并行就只能变成串行呗，那就相当于指定那么多worker就没什么用了呗，如果拥有较靠前index的那个worker一直被阻塞没将那个batch读进来，dataloader也会一直等待这个batch，反而会更慢。（这些都是我理论分析的，哈哈哈，不信的话就去实验验证吧，毕竟实践是检验真理的唯一标准(ಡωಡ)）</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/PYTORCH/">PYTORCH</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/05/10/gmm-fa/" data-tooltip="对于GMM和Factor Analysis的EM算法过程的直观理解" aria-label="PREVIOUS: 对于GMM和Factor Analysis的EM算法过程的直观理解">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/27/loss-summary/" data-tooltip="Loss summary in Speaker recognition" aria-label="NEXT: Loss summary in Speaker recognition">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/05/10/gmm-fa/" data-tooltip="对于GMM和Factor Analysis的EM算法过程的直观理解" aria-label="PREVIOUS: 对于GMM和Factor Analysis的EM算法过程的直观理解">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/27/loss-summary/" data-tooltip="Loss summary in Speaker recognition" aria-label="NEXT: Loss summary in Speaker recognition">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/28/pytorch-dataloader/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/28/pytorch-dataloader/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/28/pytorch-dataloader/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/28/pytorch-dataloader/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

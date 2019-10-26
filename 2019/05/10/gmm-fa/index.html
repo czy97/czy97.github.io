@@ -1,0 +1,540 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>对于GMM和Factor Analysis的EM算法过程的直观理解 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。\n\n什么是GMMGMM是Gaussian Mixture Models的缩写，即高斯混合模型。理论上讲，任何的分布都可以用多个高斯模型的和来近似。高斯模型个数越多，逼近也就越准确，就像数学中的级数分解。\n\np(\\mathbf{x}|\\theta)=\\sum_{m=1}^{M}c_m*\\mathcal{N}(\\mathbf{x}|\\mathbf{\\mu_{m},\\mathbf{\\Sigma_{m}}})高斯混合模型所做的就是这件事，用多个高斯去建模某个分布。当然，在实际操作的时候，高斯的个数不可能是无穷大，在上面的公式中，高斯的个数是M。\n什么是Factor Analysis（FA）科学家们总相信真理是简单的，他们认为复杂的表象背后必有着简洁的定律。世界上有如此缤纷的色彩，而追究这些色彩的来源，则是红绿蓝三种颜色的组合。因子分析（FA）也有着同样的想法，FA认为高维的变量是由更加低维的因子组合得到的。就比如我们现在有一个由24种颜色混合得到的生成色，那这个生成色可以表示为这24种颜色混合比例的24维权重向量，而这个24维向量的每一个颜色又可以由红绿蓝这三维向量的组合来表示的。\n\nx_i = \\alpha_{ir}*R + \\alpha_{ig}*G + \\alpha_{ib}*B \\qquad i=1,...,24最后这个生成色便可以表示为一个关于红绿蓝混合比例的三维向量。\n\ny_i = \\sum_i^{24}{\\alpha_{ir}}*R + \\sum_i^{24}{\\alpha_{ig}}*G + \\sum_i^{24}{\\alpha_{ib}}*B当然我们希望是这样的，可以将一个高维的向量映射维一个更加低维的向量来表示，但最后到底能不能实现又是另外一回事了。\n什么是EM算法呢EM即Expection Maximization，期望最大化。\n在EM算法中，提出了有一个被称之为隐变量的东西，一旦这个隐变量清楚了，那么最大化问题就可以很好的解决，下面来看一下在GMM和FA中什么是隐变量。\n直观理解GMM的EM算法过程首先明确一下求解GMM的目标，我们有M个数据，希望建模一个GMM使得这M个数据出现的概率最大（最大似然）。\n\np(\\mathbf{X}|\\theta)=\\prod_{n=1}^{N}p(\\mathbf{x}_n |\\theta)然后求得关于这个式子最优的GMM参数:\n\n\\theta=\\{c_{m},\\mathbf{\\mu_{m}},\\mathbf{\\Sigma_{m}}\\} , m=1,....,M这里既然说的是直观，我就不给详细推导公式了，详细的GMM的EM算法推导可以到这里找到。通过推导发现，最大似然直接求导不好解，必须通过构造某种辅助函数求得辅助函数的最大值才能逐步逼近求解，这个辅助函数$Q(\\theta,\\hat{\\theta})$如下：\n\nQ(\\theta,\\hat{\\theta}) = = \\sum_{n=1}^{N} \\sum_{m=1}^{M}\\gamma_{m}(n)*log(p(\\mathbf{x}_n|m,\\mathbf{\\Sigma}_m,\\mathbf{\\mu}_m))\n+ \\sum_{n=1}^{N} \\sum_{m=1}^{M}\\gamma_{m}(n)*log(c_m)\\\\\n\\gamma_{m}(n)=p(m|\\mathbf{x}_n,\\hat{\\theta})=\\cfrac{p(\\mathbf{x}_n|m,\\hat{\\theta})p(m|\\hat{\\theta})}\n{\\sum_{k=1}^{M}p(\\mathbf{x}_n|k,\\hat{\\theta})p(k|\\hat{\\theta})}但发现辅助函数中有个$\\gamma_{m}(n)$参数，但这个参数是从我们得到的数据无法直接观测到的。\n$\\gamma_{m}(n)$表示的是样本n属于高斯m的概率，为什么会需要这个概率，下面来直观的理解一下。我们先假想一个数据产生的流程，假如这个GMM已经是存在的了，然后我们不断的从这个GMM中去sample数据，sample的过程分为两步，首先，我们根据每个高斯的概率抽取一个单高斯，然后这个用这个单高斯去sample一个数据。最后我们sample了N个数据。\n但在实际的去计算这个GMM的时候，我们有的只是数据，也就是说关于这个数据在sample的时候来自哪个高斯是不知道的。但如果知道了这个信息，我们就可以很快的算出GMM的参数。\n而样本n所来自的那个高斯m，就是GMM-EM求解问题中的隐变量，$\\gamma_{m}(n)$是隐变量的后验概率。\n直观理解FA的EM算法过程FA的公式是这样：\n\nx^{(i)} = \\mu + \\Lambda z^{(i)} + \\epsilon我们想把高维的x映射到z。u代表x的均值，$\\epsilon$ 代表x没有被z表达的信息。而且一般我们假设z服从均值为零，方差为1的高斯分布。\n\nz^{(i)} \\sim N(0, I) \\\\\nε \\sim N(0, Ψ)\\\\\np(x^{(i)}|z^{(i)}) \\sim N(\\mu + z^{(i)}, Ψ)在这里我们可以做与GMM里同样的理解，但有所不同的是。这个的隐变量是 $z^{(i)}$，也就是说与GMM不同的是，FA的隐变量是一个连续的值，$x^{(i)}$ 的获取也可以分为两步，首先我们sample一个$z^{(i)}$，这样我们就得到了一个高斯。然后再从这个高斯里sample $x^{(i)}$。与GMM不同的是，在FA中，第二步所得到的高斯具有同样的方差。\n所以这样理解，FA的优化过程没什么区别，只是由离散变为了连续。\n","dateCreated":"2019-05-10T17:18:41+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-05-10T17:18:41+08:00","description":"突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。","headline":"对于GMM和Factor Analysis的EM算法过程的直观理解","image":["cover.png","cover.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/05/10/gmm-fa/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/05/10/gmm-fa/","keywords":"EM, GMM, FA","thumbnailUrl":"cover.png"}</script>
+    <meta name="description" content="突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="对于GMM和Factor Analysis的EM算法过程的直观理解">
+<meta property="og:url" content="http://czy97.github.io/2019/05/10/gmm-fa/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.967Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="对于GMM和Factor Analysis的EM算法过程的直观理解">
+<meta name="twitter:description" content="突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/05/10/gmm-fa/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/05/10/gmm-fa/cover.png" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/05/10/gmm-fa/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/05/10/gmm-fa/cover.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/05/10/gmm-fa/cover.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            对于GMM和Factor Analysis的EM算法过程的直观理解
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-05-10T17:18:41+08:00">
+	
+		    5月 10, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>突然对于GMM和FA好像又想清楚了一些东西，赶紧记下。</p>
+<a id="more"></a>
+<h3 id="什么是GMM"><a href="#什么是GMM" class="headerlink" title="什么是GMM"></a>什么是GMM</h3><p>GMM是Gaussian Mixture Models的缩写，即高斯混合模型。理论上讲，任何的分布都可以用多个高斯模型的和来近似。高斯模型个数越多，逼近也就越准确，就像数学中的级数分解。</p>
+<script type="math/tex; mode=display">
+p(\mathbf{x}|\theta)=\sum_{m=1}^{M}c_m*\mathcal{N}(\mathbf{x}|\mathbf{\mu_{m},\mathbf{\Sigma_{m}}})</script><p>高斯混合模型所做的就是这件事，用多个高斯去建模某个分布。当然，在实际操作的时候，高斯的个数不可能是无穷大，在上面的公式中，高斯的个数是M。</p>
+<h3 id="什么是Factor-Analysis（FA）"><a href="#什么是Factor-Analysis（FA）" class="headerlink" title="什么是Factor Analysis（FA）"></a>什么是Factor Analysis（FA）</h3><p>科学家们总相信真理是简单的，他们认为复杂的表象背后必有着简洁的定律。世界上有如此缤纷的色彩，而追究这些色彩的来源，则是红绿蓝三种颜色的组合。因子分析（FA）也有着同样的想法，FA认为高维的变量是由更加低维的因子组合得到的。就比如我们现在有一个由24种颜色混合得到的生成色，那这个生成色可以表示为这24种颜色混合比例的24维权重向量，而这个24维向量的每一个颜色又可以由红绿蓝这三维向量的组合来表示的。</p>
+<script type="math/tex; mode=display">
+x_i = \alpha_{ir}*R + \alpha_{ig}*G + \alpha_{ib}*B \qquad i=1,...,24</script><p>最后这个生成色便可以表示为一个关于红绿蓝混合比例的三维向量。</p>
+<script type="math/tex; mode=display">
+y_i = \sum_i^{24}{\alpha_{ir}}*R + \sum_i^{24}{\alpha_{ig}}*G + \sum_i^{24}{\alpha_{ib}}*B</script><p>当然我们希望是这样的，可以将一个高维的向量映射维一个更加低维的向量来表示，但最后到底能不能实现又是另外一回事了。</p>
+<h3 id="什么是EM算法呢"><a href="#什么是EM算法呢" class="headerlink" title="什么是EM算法呢"></a>什么是EM算法呢</h3><p>EM即Expection Maximization，期望最大化。</p>
+<p>在EM算法中，提出了有一个被称之为<strong>隐变量</strong>的东西，一旦这个隐变量清楚了，那么最大化问题就可以很好的解决，下面来看一下在GMM和FA中什么是隐变量。</p>
+<h3 id="直观理解GMM的EM算法过程"><a href="#直观理解GMM的EM算法过程" class="headerlink" title="直观理解GMM的EM算法过程"></a>直观理解GMM的EM算法过程</h3><p>首先明确一下求解GMM的目标，我们有M个数据，希望建模一个GMM使得这M个数据出现的概率最大（最大似然）。</p>
+<script type="math/tex; mode=display">
+p(\mathbf{X}|\theta)=\prod_{n=1}^{N}p(\mathbf{x}_n |\theta)</script><p>然后求得关于这个式子最优的GMM参数:</p>
+<script type="math/tex; mode=display">
+\theta=\{c_{m},\mathbf{\mu_{m}},\mathbf{\Sigma_{m}}\} , m=1,....,M</script><p>这里既然说的是直观，我就不给详细推导公式了，详细的GMM的EM算法推导可以到<a href="https://github.com/czy97/Study-Notes/blob/master/ML_basic/GMM/GMM_StudyNotes.pdf" target="_blank" rel="noopener">这里</a>找到。通过推导发现，最大似然直接求导不好解，必须通过构造某种辅助函数求得<strong>辅助函数的最大值</strong>才能逐步逼近求解，这个辅助函数$Q(\theta,\hat{\theta})$如下：</p>
+<script type="math/tex; mode=display">
+Q(\theta,\hat{\theta}) = = \sum_{n=1}^{N} \sum_{m=1}^{M}\gamma_{m}(n)*log(p(\mathbf{x}_n|m,\mathbf{\Sigma}_m,\mathbf{\mu}_m))
++ \sum_{n=1}^{N} \sum_{m=1}^{M}\gamma_{m}(n)*log(c_m)\\
+\gamma_{m}(n)=p(m|\mathbf{x}_n,\hat{\theta})=\cfrac{p(\mathbf{x}_n|m,\hat{\theta})p(m|\hat{\theta})}
+{\sum_{k=1}^{M}p(\mathbf{x}_n|k,\hat{\theta})p(k|\hat{\theta})}</script><p>但发现辅助函数中有个$\gamma_{m}(n)$参数，但这个参数是从我们得到的数据<strong>无法直接观测到</strong>的。</p>
+<p>$\gamma_{m}(n)$表示的是样本n属于高斯m的概率，为什么会需要这个概率，下面来直观的理解一下。我们先假想一个<strong>数据产生的流程</strong>，假如这个GMM已经是存在的了，然后我们不断的从这个GMM中去sample数据，sample的过程分为两步，首先，我们根据每个高斯的概率抽取一个单高斯，然后这个用这个单高斯去sample一个数据。最后我们sample了N个数据。</p>
+<p>但在实际的去计算这个GMM的时候，我们有的只是数据，也就是说关于这个数据在sample的时候来自哪个高斯是不知道的。但如果知道了这个信息，我们就可以很快的算出GMM的参数。</p>
+<p>而样本n所来自的那个高斯m，就是GMM-EM求解问题中的隐变量，$\gamma_{m}(n)$是隐变量的后验概率。</p>
+<h3 id="直观理解FA的EM算法过程"><a href="#直观理解FA的EM算法过程" class="headerlink" title="直观理解FA的EM算法过程"></a>直观理解FA的EM算法过程</h3><p>FA的公式是这样：</p>
+<script type="math/tex; mode=display">
+x^{(i)} = \mu + \Lambda z^{(i)} + \epsilon</script><p>我们想把高维的x映射到z。u代表x的均值，$\epsilon$ 代表x没有被z表达的信息。而且一般我们假设z服从均值为零，方差为1的高斯分布。</p>
+<script type="math/tex; mode=display">
+z^{(i)} \sim N(0, I) \\
+ε \sim N(0, Ψ)\\
+p(x^{(i)}|z^{(i)}) \sim N(\mu + z^{(i)}, Ψ)</script><p>在这里我们可以做与GMM里同样的理解，但有所不同的是。这个的隐变量是 $z^{(i)}$，也就是说与GMM不同的是，FA的隐变量是一个连续的值，$x^{(i)}$ 的获取也可以分为两步，首先我们sample一个$z^{(i)}$，这样我们就得到了一个高斯。然后再从这个高斯里sample $x^{(i)}$。与GMM不同的是，在FA中，第二步所得到的高斯具有<strong>同样的方差</strong>。</p>
+<p>所以这样理解，FA的优化过程没什么区别，只是由离散变为了连续。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/EM/">EM</a> <a class="tag tag--primary tag--small t-link" href="/tags/FA/">FA</a> <a class="tag tag--primary tag--small t-link" href="/tags/GMM/">GMM</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/10/softmax/" data-tooltip="多种Softmax对比" aria-label="PREVIOUS: 多种Softmax对比">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/28/pytorch-dataloader/" data-tooltip="Pytorch Dataloader 学习笔记" aria-label="NEXT: Pytorch Dataloader 学习笔记">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/06/10/softmax/" data-tooltip="多种Softmax对比" aria-label="PREVIOUS: 多种Softmax对比">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/28/pytorch-dataloader/" data-tooltip="Pytorch Dataloader 学习笔记" aria-label="NEXT: Pytorch Dataloader 学习笔记">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/05/10/gmm-fa/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/05/10/gmm-fa/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/05/10/gmm-fa/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/05/10/gmm-fa/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

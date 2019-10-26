@@ -1,0 +1,550 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Python 多线程与多进程 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。\n\n前言一般计算机的程序有两种，CPU bound（或者说是CPU itensive）和IO bound。什么意思呢，如果一个程序提高CPU运算速度，就可以实现程序的提速，那这个程序就是CPU bound的，也就是CPU是这个程序的瓶颈。但如果另一个程序，你即使将CPU运算速度提高了很多倍，程序的运行时间变化不大，那这个程序很可能就是IO bound的，也就是说IO是这个程序的瓶颈。\n为了更有效的实现数据的读取，我打算使用python的多进/线程，然后就有了这篇博文。\n为什么说python的多线程是假的python的多线程可以通过下面的这个库调用\n1import thread\npython的多线程的确是假的，这个假体现在，多线程的运行并不是并行的。而是串行的。(so sad ;´༎ຶД༎ຶ`) 。这样说，岂不是很弱智吗？为什么当时python的设计者非得这样做呢？原因有二：\n\npython产生的有点早\npython产生的那个时间，计算机还很落后，计算机cpu都是单核的，根本就没有多线程的用武之地\n\npython的存储管理（memory management)机制\n我在这里说的存储管理机制主要指Python的垃圾回收（Garbage Collection）机制。在学习C语音的时候，我们都知道在allocate memory之后，一旦这个变量不用的，memory一定要free掉，不然会造成存储泄漏，就没有内存用了。\n当然，像python这种高级语言，自然不用programmer自己去做这件事，python可以帮你搞定，python的存储管理机制共有两种：\n\nReference counting\nGarbage collection\n\nReference counting所谓的引用计数是这样的，python会对object被其他object引用的次数进行计数。计数可以通过以下程序获得：\n12345import sysa = []b = asys.getrefcount(a)3\n上面的程序对于空列表的引用次数一共是3次，分别是a，b，和函数的参数。\n而当一个object的引用次数变为0的时候，这个object所占的内存便会被释放：\n123456# Literal 9 is an object b = 9  # Reference count of object 9  # becomes 0. b = 4\n如上面的代码，第一行赋值之后，9的引用次数变为了1，第二行之后，9的引用次数变味了0，所占的内存便会被释放掉。\nGarbage collection既然有了Reference counting这种机制，为什么还要Garbage collection呢？因为有一种情况，会使得object的引用无法为零，这种方式就是自己引用自己。\n1234567891011def create_cycle():       # create a list x     x = [ ]       # A reference cycle is created     # here as x contains reference to     # to self.     x.append(x)    create_cycle()\n上面的代码，列表x引用了自己，这样的话，就形成了这种引用循环，Reference counting无法处理这种情况。\n这时候就必须使用Garbage collection来进行内存的释放了，但这种引用循环的查找是很费计算时间的，所以Garbage collection的执行是周期性的。一般是通过一个thresholds来决定要不要执行Garbage collection。这个thresholds的定义是python在一段时间里分配内存的object个数与释放object个数之差。一旦超过这个阈值，Garbage collection就会被自动执行。\n当然我们也可以手动执行Garbage collection，执行的代码如下：\n1234567# Importing gc module import gc   # Returns the number of # objects it has collected # and deallocated collected = gc.collect()\n但需要注意的是，Garbage collection只会处理引用循环，它并不会处理其他引用计数不为0的object。\nSo？ 多线程为什么需要是假的？因为多线程是共享内存的，也就是说多个线程会共同一起修改Reference counting，这就会造成计数的值不对了，解决的办法也很简单，那就对每个计数加lock就好了。但是呢，lock加多了又会出现死锁的问题。所以python的最终的解决方案就是只留下一个lock。这个就是GIL（global interpreter lock）。也就是给解释器加lock，对于python的code，同一个时间只能有一个线程执行，所以多线程就变成了假的。也就是说，即使计算式是有多核的，这几个核也只可能交替执行，而无法在同一个时间执行。\n\n\n那python该怎样并行呢？python的并行可以用多进程来实现：\n1from multiprocessing import Process\n多进程之间的内存是不共享的，每个进程拥有自己的GIL，所以不会出现多线程的问题。\n一些介绍python mutiprocessing的blog：\nPython Multiprocessing\nMultiprocessing In Python\n\npython的多线程是鸡肋吗？答案可以说不是。因为多线程还是有用武之地的。当一个python程序是IO bound的时候，多线程是可以用来解决这个问题的。\n当python调用C的链接库的时候，GIL会在这之前被释放。I/O操作会调用操作系统内建的c代码，GIL会在I/O被调用之前被释放，以允许其他线程在这个线程等待I/O的时候运行。\n","dateCreated":"2019-04-19T16:13:03+08:00","dateModified":"2019-10-26T15:48:10+08:00","datePublished":"2019-04-19T16:13:03+08:00","description":"前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。","headline":"Python 多线程与多进程","image":["cover.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/04/19/python-multi/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/04/19/python-multi/","keywords":"PYTHON","thumbnailUrl":"cover.jpg"}</script>
+    <meta name="description" content="前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Python 多线程与多进程">
+<meta property="og:url" content="http://czy97.github.io/2019/04/19/python-multi/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-10-26T07:48:10.013Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Python 多线程与多进程">
+<meta name="twitter:description" content="前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/19/python-multi/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/19/python-multi/cover.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/19/python-multi/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/19/python-multi/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/04/19/python-multi/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Python 多线程与多进程
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-19T16:13:03+08:00">
+	
+		    4月 19, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>前段时间自己在跑代码的时候，一直被IO读的太慢的问题所烦恼。于是乎，就顺便了解了下python多进/线程的实现和原理。</p>
+<a id="more"></a>
+<h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>一般计算机的程序有两种，<strong>CPU bound</strong>（或者说是CPU itensive）和<strong>IO bound</strong>。什么意思呢，如果一个程序提高CPU运算速度，就可以实现程序的提速，那这个程序就是CPU bound的，也就是CPU是这个程序的瓶颈。但如果另一个程序，你即使将CPU运算速度提高了很多倍，程序的运行时间变化不大，那这个程序很可能就是IO bound的，也就是说IO是这个程序的瓶颈。</p>
+<p>为了更有效的实现数据的读取，我打算使用python的多进/线程，然后就有了这篇博文。</p>
+<h2 id="为什么说python的多线程是假的"><a href="#为什么说python的多线程是假的" class="headerlink" title="为什么说python的多线程是假的"></a>为什么说python的多线程是假的</h2><p>python的多线程可以通过下面的这个库调用</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> thread</span><br></pre></td></tr></table></figure>
+<p>python的多线程的确是假的，这个假体现在，多线程的运行<strong>并不是并行的</strong>。而是串行的。(so sad ;´༎ຶД༎ຶ`) 。这样说，岂不是很弱智吗？为什么当时python的设计者非得这样做呢？原因有二：</p>
+<ul>
+<li><p>python产生的有点早</p>
+<p>python产生的那个时间，计算机还很落后，计算机cpu都是单核的，根本就没有多线程的用武之地</p>
+</li>
+<li><p>python的存储管理（memory management)机制</p>
+<p>我在这里说的存储管理机制主要指Python的垃圾回收（Garbage Collection）机制。在学习C语音的时候，我们都知道在allocate memory之后，一旦这个变量不用的，memory一定要free掉，不然会造成存储泄漏，就没有内存用了。</p>
+<p>当然，像python这种高级语言，自然不用programmer自己去做这件事，python可以帮你搞定，python的存储管理机制共有两种：</p>
+<ul>
+<li>Reference counting</li>
+<li>Garbage collection</li>
+</ul>
+<h4 id="Reference-counting"><a href="#Reference-counting" class="headerlink" title="Reference counting"></a>Reference counting</h4><p>所谓的引用计数是这样的，python会对object被其他object引用的次数进行计数。计数可以通过以下程序获得：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> sys</span><br><span class="line">a = []</span><br><span class="line">b = a</span><br><span class="line">sys.getrefcount(a)</span><br><span class="line"><span class="number">3</span></span><br></pre></td></tr></table></figure>
+<p>上面的程序对于空列表的引用次数一共是3次，分别是a，b，和函数的参数。</p>
+<p>而当一个object的引用次数变为0的时候，这个object所占的内存便会被释放：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># Literal 9 is an object </span></span><br><span class="line">b = <span class="number">9</span></span><br><span class="line">  </span><br><span class="line"><span class="comment"># Reference count of object 9  </span></span><br><span class="line"><span class="comment"># becomes 0. </span></span><br><span class="line">b = <span class="number">4</span></span><br></pre></td></tr></table></figure>
+<p>如上面的代码，第一行赋值之后，9的引用次数变为了1，第二行之后，9的引用次数变味了0，所占的内存便会被释放掉。</p>
+<h4 id="Garbage-collection"><a href="#Garbage-collection" class="headerlink" title="Garbage collection"></a>Garbage collection</h4><p>既然有了Reference counting这种机制，为什么还要Garbage collection呢？因为有一种情况，会使得object的引用无法为零，这种方式就是自己引用自己。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">create_cycle</span><span class="params">()</span>:</span> </span><br><span class="line">  </span><br><span class="line">    <span class="comment"># create a list x </span></span><br><span class="line">    x = [ ] </span><br><span class="line">  </span><br><span class="line">    <span class="comment"># A reference cycle is created </span></span><br><span class="line">    <span class="comment"># here as x contains reference to </span></span><br><span class="line">    <span class="comment"># to self. </span></span><br><span class="line">    x.append(x) </span><br><span class="line">   </span><br><span class="line">create_cycle()</span><br></pre></td></tr></table></figure>
+<p>上面的代码，列表x引用了自己，这样的话，就形成了这种<strong>引用循环</strong>，Reference counting无法处理这种情况。</p>
+<p>这时候就必须使用Garbage collection来进行内存的释放了，但这种引用循环的查找是很<strong>费计算时间</strong>的，所以Garbage collection的执行是周期性的。一般是通过一个thresholds来决定要不要执行Garbage collection。这个thresholds的定义是python在一段时间里分配内存的object个数与释放object个数<strong>之差</strong>。一旦超过这个阈值，Garbage collection就会被自动执行。</p>
+<p>当然我们也可以手动执行Garbage collection，执行的代码如下：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># Importing gc module </span></span><br><span class="line"><span class="keyword">import</span> gc </span><br><span class="line">  </span><br><span class="line"><span class="comment"># Returns the number of </span></span><br><span class="line"><span class="comment"># objects it has collected </span></span><br><span class="line"><span class="comment"># and deallocated </span></span><br><span class="line">collected = gc.collect()</span><br></pre></td></tr></table></figure>
+<p>但需要注意的是，Garbage collection只会<strong>处理引用循环</strong>，它并不会处理其他引用计数不为0的object。</p>
+<h4 id="So？-多线程为什么需要是假的？"><a href="#So？-多线程为什么需要是假的？" class="headerlink" title="So？ 多线程为什么需要是假的？"></a>So？ 多线程为什么需要是假的？</h4><p>因为多线程是共享内存的，也就是说多个线程会共同<strong>一起修改Reference counting</strong>，这就会造成计数的值不对了，解决的办法也很简单，那就对每个计数加lock就好了。但是呢，lock加多了又会出现死锁的问题。所以python的最终的解决方案就是<strong>只留下一个lock</strong>。这个就是<strong>GIL</strong>（global interpreter lock）。也就是给解释器加lock，对于python的code，同一个时间只能有一个线程执行，所以多线程就变成了假的。也就是说，即使计算式是有多核的，这几个核也只可能交替执行，而无法在同一个时间执行。</p>
+</li>
+</ul>
+<h3 id="那python该怎样并行呢？"><a href="#那python该怎样并行呢？" class="headerlink" title="那python该怎样并行呢？"></a>那python该怎样并行呢？</h3><p>python的并行可以用多<strong>进程</strong>来实现：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> multiprocessing <span class="keyword">import</span> Process</span><br></pre></td></tr></table></figure>
+<p>多进程之间的<strong>内存是不共享</strong>的，每个进程拥有自己的GIL，所以不会出现多线程的问题。</p>
+<h4 id="一些介绍python-mutiprocessing的blog："><a href="#一些介绍python-mutiprocessing的blog：" class="headerlink" title="一些介绍python mutiprocessing的blog："></a>一些介绍python mutiprocessing的blog：</h4><ul>
+<li><a href="http://euccas.github.io/blog/20161231/python-multiprocessing.html" target="_blank" rel="noopener">Python Multiprocessing</a></li>
+<li><a href="https://pythontic.com/multiprocessing/multiprocessing/introduction" target="_blank" rel="noopener">Multiprocessing In Python</a></li>
+</ul>
+<h3 id="python的多线程是鸡肋吗？"><a href="#python的多线程是鸡肋吗？" class="headerlink" title="python的多线程是鸡肋吗？"></a>python的多线程是鸡肋吗？</h3><p>答案可以说不是。因为多线程还是有用武之地的。当一个python程序是IO bound的时候，多线程是可以用来解决这个问题的。</p>
+<p>当python调用<strong>C的链接库</strong>的时候，GIL会在这之前被释放。I/O操作会调用操作系统内建的c代码，GIL会在I/O被调用之前被释放，以允许其他线程在这个线程等待I/O的时候运行。</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/PYTHON/">PYTHON</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/27/loss-summary/" data-tooltip="Loss summary in Speaker recognition" aria-label="PREVIOUS: Loss summary in Speaker recognition">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/09/end-to-end-td/" data-tooltip="Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;" aria-label="NEXT: Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/27/loss-summary/" data-tooltip="Loss summary in Speaker recognition" aria-label="PREVIOUS: Loss summary in Speaker recognition">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/09/end-to-end-td/" data-tooltip="Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;" aria-label="NEXT: Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/19/python-multi/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/19/python-multi/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/19/python-multi/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/19/python-multi/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

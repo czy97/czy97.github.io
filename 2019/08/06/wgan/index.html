@@ -1,0 +1,621 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>WGAN学习笔记 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。\n\n参考文章：\n\n令人拍案叫绝的Wasserstein GAN\nGAN — Wasserstein GAN &amp; WGAN-GP\n\n\n原始GAN存在的问题要想知道原始GAN存在什么问题，我们先看一下GAN的优化目标。\n\n\\underset{G}{min}\\ \\underset{D}{max}=\\mathbb{E}_{x\\sim p_{data}(x)}[logD(x)]\n+\\mathbb{E}_{x\\sim p_z(z)}[log(1-D(G(z))] \\label{gan_target}\\tag{0}作者在原始论文中提到，在真正优化G的时候 $log(1-D(G(z))$ 可能无法给G提供足够的梯度，于是可以通过maxmize $log(D(G(z))$ 的方式来更新G。而在WGAN的前序论文中，证明了这两种优化G的方式都是有一定问题的。\n优化准则$log(1-D(G(z))$ 带来的梯度消失在论文中，作者也给出了相关的证明，通过一步步优化公式$\\ref{gan_target}$，最终的目标就是使得$p_{data}(x) = p_g(x)$ .\n\n优化D\n\n\\begin{align*}\nLoss\\_D &= -\\mathbb{E}_{x\\sim p_{data}(x)}[logD(x)]\n-\\mathbb{E}_{x\\sim p_g(x)}[log(1-D(x)]  \\\\\n& = -\\int{p_{data}(x)logD(x)}-\\int{p_g(x)log(1-D(x)}\n\\end{align*} \\label{d_loss}\\tag{1}由$\\cfrac{\\partial Loss}{\\partial D(x)} = 0$ 可以得到：\n\nD^*(x) = \\cfrac{p_{data}(x)}{p_{data}(x) + p_g(x)} \\label{d_res}\\tag{2}\n优化G\n将公式$\\ref{d_res}$ 中的结果，带入公式$\\ref{gan_target}$ ,可以得到得到最优的D之后，优化G的目标\n\nLoss\\_G = \\mathbb{E}_{x\\sim p_{data}(x)}[\\cfrac{p_{data}(x)}{p_{data}(x) + p_g(x)}]\n+\\mathbb{E}_{x\\sim p_g(x)}[\\cfrac{p_g(x)}{p_{data}(x) + p_g(x)}] \\label{g_loss}\\tag{3}在此，介绍连个分布距离度量的指标:\n\nKL divergence: $KL(P_1||P_2) = \\mathbb{E}_{x \\sim P_1} log\\cfrac{P_1}{P_2} \\label{kl_div}\\tag{4}$ \nJS divergence: $JS(P_1||P_2)= \\cfrac{1}{2}KL(P_1||\\cfrac{P_1+P_2}{2})+\\cfrac{1}{2}KL(P_2||\\cfrac{P_1+P_2}{2}) \\label{js_div}\\tag{5}$\n\nG的优化目标$\\ref{g_loss}$可以通过形式的变换转为JS的的形式：\n\nLoss\\_G = 2JS(P_{data}(x)||P_g(x))-2log2虽然我们将G的loss转为了某种距离，即JS，但是这种距离是有点问题的。看下面两张图，假设p就是真实分布，q是我们生成的分布。可以清晰的看出，KL和JS散度在q的均值为零的时候都为0。但是随着q远离p，KL和JS逐渐趋于定值，而且JS趋于定值的速度更快。既然趋于定值了，那么相应的梯度就是0了。\n\n\n也就是说，两个分布越近，JS产生的梯度就越大。但是真实分布和生成的分布有一定重合的概率有多大呢？请看这篇知乎中关于高维空间的低维流形的介绍。结果就是，两个分布很可能是高维空间中的低维存在，两个低维物体在高维空间的交集仍是低维的，这个交集在高维空间的测度就基本为零（比如两个二维物体在三维空间的交集的体积怎么都是零）。\nD在最优的时候，在优化G的时候就等同于优化JS散度，这样的话，我们就不能将D训练到比较好。但是，我们又不能将D训练到太差，太差的话，D就没法指导G进行更新了，更新G的时候梯度就不再准确。因此，怎样平衡每个stepG和D的训练程度是一个很令人头疼的问题。\nWGAN的前序论文也通过实验验证了梯度消失的问题：\n\n1在分别训练了DCGAN 1,10,25个epoch之后，固定generator的参数，将discriminator随机初始化重新训练，generator梯度的变化。可以发现，随着discriminator的训练，generator的梯度会逐渐减小（指数减小）。\n\n\n优化准则$-log(D(G(z))$ 带来的梯度不稳定和collapse mode这时G的损失函数为$\\mathbb{E}_{x \\sim P_{g}}[-\\log D(x)]$\n在前一部分我们知道，在判别器最优的情况下（$D(x) = D^*(x)$）：\n\n\\mathbb{E}_{x \\sim P_{data}}\\left[\\log D^{*}(x)\\right]+\\mathbb{E}_{x \\sim P_{g}}\\left[\\log \\left(1-D^{*}(x)\\right)\\right]=2 J S\\left(P_{data} \\| P_{g}\\right)-2 \\log 2 \\label{equation_6}\\tag{6}通过对KL散度的形式变换可以得到：\n\n\\begin{aligned} K L\\left(P_{g} \\| P_{data}\\right) &=\\mathbb{E}_{x \\sim P_{g}}\\left[\\log \\frac{P_{g}(x)}{P_{data}(x)}\\right] \\\\ &=\\mathbb{E}_{x \\sim P_{g}}\\left[\\log \\frac{P_{g}(x) /\\left(P_{data}(x)+P_{g}(x)\\right)}{P_{data}(x) /\\left(P_{data}(x)+P_{g}(x)\\right)}\\right] \\\\ &=\\mathbb{E}_{x \\sim P_{g}}\\left[\\log \\frac{1-D^{*}(x)}{D^{*}(x)}\\right] \\\\ &=\\mathbb{E}_{x \\sim P_{g}} \\log \\left[1-D^{*}(x)\\right]-\\mathbb{E}_{x \\sim P_{g}} \\log D^{*}(x) \n\\end{aligned} \\label{equation_7}\\tag{7}由公式$\\ref{equation_6}$和$\\ref{equation_7}$可以得到：\n\n\\begin{aligned} \\mathbb{E}_{x \\sim P_{g}}\\left[-\\log D^{*}(x)\\right] &=K L\\left(P_{g} \\| P_{data}\\right)-\\mathbb{E}_{x \\sim P_{g}} \\log \\left[1-D^{*}(x)\\right] \\\\ &=K L\\left(P_{g} \\| P_{data}\\right)-2 J S\\left(P_{data} \\| P_{g}\\right)+2 \\log 2+\\mathbb{E}_{x \\sim P_{data}}\\left[\\log D^{*}(x)\\right] \\end{aligned} \\label{equation_8}\\tag{8}去掉上面公式中不含G的项，最后的优化目标变为：\n\nK L\\left(P_{g} \\| P_{data}\\right)-2 J S\\left(P_{data} \\| P_{g}\\right) \\label{equation_9}\\tag{9}这个损失函数一方面想要最小化KL，一方面又想最大化JS, 在直观上难以理解。\n此外，由于KL 散度非对称性，对于$K L\\left(P_{g} | P_{data}\\right)$\n\n$当 \\ P_{data}(x) \\rightarrow 0   \\ 而 \\  P_{g}(x) \\rightarrow 1 \\  时，K L\\left(P_{g} | P_{data}\\right) \\rightarrow +\\infty$ \n$当 \\ P_{data}(x) \\rightarrow 1   \\ 而 \\  P_{g}(x) \\rightarrow 0 \\  时，K L\\left(P_{g} | P_{data}\\right) \\rightarrow 0$\n\n上面的两种情况对应了两种错误，第一种是生成了错误的样本，第二种是有些应该生成的样本没有生成，可以看出，根据第二种情况，G可以只去拟合真实分布的部分分布而不会受到惩罚，而生成错误的样本则会受到巨大的惩罚。如果G按照第二种情况的指示去生成样本就很可能导致collapse mode。\n同样的，WGAN的前序论文也通过实验验证了梯度不稳定的问题：\n\n1在分别训练了DCGAN 1,10,25个epoch之后，固定generator的参数，将discriminator随机初始化重新训练，generator梯度的变化。可以发现，随着discriminator的训练，generator的梯度会逐渐增大（指数增大）。\nWGAN介绍新的距离定义，Wasserstein距离从上文可以看出，不管是JS还是KL距离，两者都有某种不连续性，也就是说当两个分布距离超过一定程度的时候，两者都将距离认为是定值。这对于优化两个分布是非常不利的，WGAN定义的距离则更加的合理。\nWGAN使用的距离Wasserstein距离又被称为是Earth-Mover (EM) distance，中文称为搬土距离。可以进行这样简单的理解，A省有三个市A1、A2、A3，这三个市分别有5,2,3吨土，B省有四个市，B1、B2、B3、B4，分别需要1,6,2,1吨土，我们希望A省通过一定的策略将A省拥有的土送往B省，并希望A省制定一个比较好的方案，让A省运输过程消耗最少。\n公式如下：\n\nW\\left(\\mathbb{P}_{r}, \\mathbb{P}_{g}\\right)=\\inf _{\\gamma \\in \\Pi\\left(\\mathbb{P}_{r}, \\mathbb{P}_{g}\\right)} \\mathbb{E}_{(x, y) \\sim \\gamma}[\\|x-y\\|] \\label{equation_10}\\tag{10}可能，有点复杂。其实和搬土是一样的，只不过我们将每个省需要和拥有土量的分布换为了连续的分布$\\mathbb{P}_{r}$ 和 $\\mathbb{P}_{g}$ 。将某个省某市将土运到另一个省某市这种情况的出现换为了两个分布某个值同时出现，即联合分布。运土的策略有很多，两个边缘分布的联合概率也有很多，在所有的联合概率中寻找使得方程$\\ref{equation_10}$值最小的那个，代表的就是Earth-Mover (EM) distance。\n这个距离的度量相对于KL和JS到底好在哪里，我们可以假设这样一个分布：\nP1在线段AB上均匀分布，P2在线段CD上均匀分布，CD的位置由$\\theta$来决定，\n\n\n上图分别是，随着$\\theta$的变化，W距离和JS距离的变化，可以看出W距离是连续变化的，而JS距离只在$\\theta$为0的时候为0，在其他时候都是一个定值。也就是说W距离在这种情况下仍然可以为参数更新提供有用的梯度，而JS距离不行。\nWGAN的具体实现公式$\\ref{equation_10}$的距离固然优美，但公式中的便利联合分布求下界的部分$\\inf _{\\gamma \\in \\Pi\\left(\\mathbb{P}_{r}, \\mathbb{P}_{g}\\right)}$却无法求解。作者为了更好的求解，讲公式$\\ref{equation_10}$变换为了另一种形式：\n\nW\\left(P_{r}, P_{g}\\right)=\\frac{1}{K} \\sup _{\\|f\\|_{L} \\leq K} \\mathbb{E}_{x \\sim P_{r}}[f(x)]-\\mathbb{E}_{x \\sim P_{g}}[f(x)] \\label{equation_11}\\tag{11}公式$\\ref{equation_11}$中$|f|_{L} \\leq K$,是指函数f满足常数为K的Lipschitz限制，这要求对于定义域内的任意两个元素$x1$和$x2$满足：\n\n\\left|f\\left(x_{1}\\right)-f\\left(x_{2}\\right)\\right| \\leq K\\left|x_{1}-x_{2}\\right|也就是说，f的导数值有上界。这里W是要在所有的f中找到一个上界值。\n遍历公式$\\ref{equation_10}$中的联合分布是一个很难的事，但是遍历公式$\\ref{equation_11}$中的f却很容易通过神经网络实现，每个神经网络都可以看作是一个映射函数，遍历神经网络的参数就相当于遍历所有可能的f。为了找到公式$\\ref{equation_11}$的上界，我们可以转换为下面的问题：\n\n\\max _{w \\in \\mathcal{W}} \\  \\mathbb{E}_{x \\sim \\mathbb{P}_{r}}\\left[f_{w}(x)\\right]-\\mathbb{E}_{z \\sim p(z)}\\left[f_{w}\\left(g_{\\theta}(z)\\right]\\right. \\label{equation_12}\\tag{12}现在重要的问题是，我们遍历参数w的时候不应是随便遍历的，在遍历的时候f应满足Lipschitz连续条件，因为只有这个时候公式$\\ref{equation_11}$的上界才是W距离。\n那么如何实现Lipschitz限制：\n\nWeight Clip（权重剪切）\n作者在第一WGAN的论文中，介绍了通过梯度剪切的方式实现对f的Lipschitz限制的目的。也就是说，如果神经网路f的所有参数$w_i$都在某个范围$[-c,c]$内的话，那么f关于输入样本x的导数也会在某个范围里面，虽然我们无法确定导数的范围具体是多少，但是只要导数值是有上界的，目的也就达到了。\n\nGradient penalty（梯度惩罚）\n\nweight clipping的问题\n虽然权重剪切确实可以解决Lipschitz限制的问题，但是会有些问题，因为在优化D的时候是在weight clipping的限制下进行的，优化D的目的是为了最大化公式$\\ref{equation_12}$，为了达到这个目的，函数可能会尽可能的将参数值推向参数范围的边界，也就是最大值或最小值。这样的话，就大大浪费了深度神经网络的拟合能力。而且如果网络参数都是范围边界值$c$或$-c$的话，$c$比较大的话梯度反传的时候会不断增大，很容易产生梯度爆炸的问题，$c$比较小怎会产生梯度消失的问题。作者也用实验验证了这两个问题：\n\n1注：左图是不同Weight clip权重情况下，梯度在反传过程中norm的变化。右图是weight clip和gradient penalty的参数的分布状况（图中weight clip的c设为了0.01）。\n\n\n\n\n\ngradient penalty的具体形式 \n既然Lipschitz限制是对导数的，Weight clip对权重限制可以说是走了一个更加曲折的路，gradient penalty则是直接对梯度进行限制。作者这里是对f对于x的梯度的norm做了一个限制，作者希望梯度的norm能够小于一个常数K，这里我们就不妨设K为1.    与上文想法一样，在最大化公式$\\ref{equation_12}$的时候，优化器会把f推向限制的边界，即f对x梯度的norm为1.（论文里也有一些证明），所以我们就不妨让梯度的norm为1：\n\nL=\\underset{\\tilde{\\boldsymbol{x}} \\sim \\mathbb{P}_{g}}{\\mathbb{E}}[D(\\tilde{\\boldsymbol{x}})]-\\underset{\\boldsymbol{x} \\sim \\mathbb{P}_{r}}{\\mathbb{E}}[D(\\boldsymbol{x})]+\\lambda \\underset{\\hat{\\boldsymbol{x}} \\sim \\mathbb{P}_{\\hat{\\boldsymbol{x}}}}{\\mathbb{E}}\\left[\\left(\\left\\|\\nabla_{\\hat{\\boldsymbol{x}}} D(\\hat{\\boldsymbol{x}})\\right\\|_{2}-1\\right)^{2}\\right] \\label{equation_13}\\tag{13}但公式$\\ref{equation_13}$的第三部分有个问题，这里是说f对所有的x都满足梯度norm为1。但是我们是不可能遍历一个高维空间的，作者使用了一个比较有效的trick，就是我们只对$P_r$、$P_g$以及两个分布之间的区域做限制就好了。也就是说我们取 $\\hat{\\boldsymbol{x}} \\leftarrow \\epsilon \\boldsymbol{x}+(1-\\epsilon) \\tilde{\\boldsymbol{x}},\\ \\epsilon \\sim U[0,1]$ 。\n\n\nWGAN的优势具体体现在哪里\n相对于其他结构更加稳定，对D和G的结构没有特别苛刻的限制，不需要刻意的去平衡D和G的训练（不存在G的梯度消失和不稳定）。作者在论文的附录给出了在不同结构的D、G情况下，很多GAN模型都无法维持一致较好的性能，但是WGAN-GP一直都保持着稳定的性能。\n训练过程中，Wasserstein距离距离的值可以作为模型训练的好坏的一个判断标准，Wasserstein距离值越小，说明生成的分布和真实分布越近。（但实际训练过程中，公式$\\ref{equation_11}$ 应该是先上升后下降的，上升的过程是我们通过优化D使得公式$\\ref{equation_11}$ 逐渐能够代表W距离，下降的过程是我们通过D的指导下优化G从而使得生成分布与真实分布越来越接近）\n\n","dateCreated":"2019-08-06T09:46:55+08:00","dateModified":"2019-10-26T16:03:49+08:00","datePublished":"2019-08-06T09:46:55+08:00","description":"GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。","headline":"WGAN学习笔记","image":["left.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/08/06/wgan/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/08/06/wgan/","keywords":"GAN","thumbnailUrl":"left.jpg"}</script>
+    <meta name="description" content="GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="WGAN学习笔记">
+<meta property="og:url" content="http://czy97.github.io/2019/08/06/wgan/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/distribution.jpeg">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/kl_js.jpeg">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/vanish.png">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/explode.png">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/dis.jpg">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/theta.png">
+<meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/problem.png">
+<meta property="og:updated_time" content="2019-10-26T08:03:49.544Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="WGAN学习笔记">
+<meta name="twitter:description" content="GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/08/06/wgan/distribution.jpeg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/left.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/08/06/wgan/left.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/08/06/wgan/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/08/06/wgan/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/08/06/wgan/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            WGAN学习笔记
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-08-06T09:46:55+08:00">
+	
+		    8月 06, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/paperReading/">paperReading</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>GAN自从被提出之后就受到了广泛的关注，GAN也被逐渐用于各种有趣的应用之中。虽然GAN的idea对研究者们有着巨大的吸引力，但是GAN的训练却不像普通DNN那样简单，generator和discriminator之间的平衡，训练过程中没有很好的指标度量训练效果成为了训练GAN的难点。WGAN的提出几乎完美解决了这两个问题。</p>
+<a id="more"></a>
+<p>参考文章：</p>
+<ul>
+<li><a href="https://zhuanlan.zhihu.com/p/25071913" target="_blank" rel="noopener">令人拍案叫绝的Wasserstein GAN</a></li>
+<li><a href="https://medium.com/@jonathan_hui/gan-wasserstein-gan-wgan-gp-6a1a2aa1b490" target="_blank" rel="noopener">GAN — Wasserstein GAN &amp; WGAN-GP</a></li>
+</ul>
+<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#原始GAN存在的问题"><span class="toc-text">原始GAN存在的问题</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#优化准则-log-1-D-G-z-带来的梯度消失"><span class="toc-text">优化准则$log(1-D(G(z))$ 带来的梯度消失</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#优化准则-log-D-G-z-带来的梯度不稳定和collapse-mode"><span class="toc-text">优化准则$-log(D(G(z))$ 带来的梯度不稳定和collapse mode</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#WGAN介绍"><span class="toc-text">WGAN介绍</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#新的距离定义，Wasserstein距离"><span class="toc-text">新的距离定义，Wasserstein距离</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#WGAN的具体实现"><span class="toc-text">WGAN的具体实现</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#WGAN的优势具体体现在哪里"><span class="toc-text">WGAN的优势具体体现在哪里</span></a></li></ol></li></ol>
+<h2 id="原始GAN存在的问题"><a href="#原始GAN存在的问题" class="headerlink" title="原始GAN存在的问题"></a>原始GAN存在的问题</h2><p>要想知道原始GAN存在什么问题，我们先看一下GAN的优化目标。</p>
+<script type="math/tex; mode=display">
+\underset{G}{min}\ \underset{D}{max}=\mathbb{E}_{x\sim p_{data}(x)}[logD(x)]
++\mathbb{E}_{x\sim p_z(z)}[log(1-D(G(z))] \label{gan_target}\tag{0}</script><p>作者在原始论文中提到，在真正优化G的时候 $log(1-D(G(z))$ 可能无法给G提供<strong>足够的梯度</strong>，于是可以通过maxmize $log(D(G(z))$ 的方式来更新G。而在WGAN的<a href="https://arxiv.org/pdf/1701.04862.pdf" target="_blank" rel="noopener">前序论文</a>中，证明了这两种优化G的方式都是有一定问题的。</p>
+<h3 id="优化准则-log-1-D-G-z-带来的梯度消失"><a href="#优化准则-log-1-D-G-z-带来的梯度消失" class="headerlink" title="优化准则$log(1-D(G(z))$ 带来的梯度消失"></a>优化准则$log(1-D(G(z))$ 带来的梯度消失</h3><p>在论文中，作者也给出了相关的证明，通过一步步优化公式$\ref{gan_target}$，最终的目标就是使得$p_{data}(x) = p_g(x)$ .</p>
+<ol>
+<li><p>优化D</p>
+<script type="math/tex; mode=display">
+\begin{align*}
+Loss\_D &= -\mathbb{E}_{x\sim p_{data}(x)}[logD(x)]
+-\mathbb{E}_{x\sim p_g(x)}[log(1-D(x)]  \\
+& = -\int{p_{data}(x)logD(x)}-\int{p_g(x)log(1-D(x)}
+\end{align*} \label{d_loss}\tag{1}</script><p>由$\cfrac{\partial Loss}{\partial D(x)} = 0$ 可以得到：</p>
+<script type="math/tex; mode=display">
+D^*(x) = \cfrac{p_{data}(x)}{p_{data}(x) + p_g(x)} \label{d_res}\tag{2}</script></li>
+<li><p>优化G</p>
+<p>将公式$\ref{d_res}$ 中的结果，带入公式$\ref{gan_target}$ ,可以得到得到<strong>最优的D</strong>之后，优化G的目标</p>
+<script type="math/tex; mode=display">
+Loss\_G = \mathbb{E}_{x\sim p_{data}(x)}[\cfrac{p_{data}(x)}{p_{data}(x) + p_g(x)}]
++\mathbb{E}_{x\sim p_g(x)}[\cfrac{p_g(x)}{p_{data}(x) + p_g(x)}] \label{g_loss}\tag{3}</script><p>在此，介绍连个分布距离度量的指标:</p>
+<ul>
+<li>KL divergence: $KL(P_1||P_2) = \mathbb{E}_{x \sim P_1} log\cfrac{P_1}{P_2} \label{kl_div}\tag{4}$ </li>
+<li>JS divergence: $JS(P_1||P_2)= \cfrac{1}{2}KL(P_1||\cfrac{P_1+P_2}{2})+\cfrac{1}{2}KL(P_2||\cfrac{P_1+P_2}{2}) \label{js_div}\tag{5}$</li>
+</ul>
+<p>G的优化目标$\ref{g_loss}$可以通过形式的变换转为JS的的形式：</p>
+<script type="math/tex; mode=display">
+Loss\_G = 2JS(P_{data}(x)||P_g(x))-2log2</script><p>虽然我们将G的loss转为了某种距离，即JS，但是这种距离是有点问题的。看下面两张图，假设p就是真实分布，q是我们生成的分布。可以清晰的看出，KL和JS散度在q的均值为零的时候都为0。但是随着q远离p，KL和JS逐<strong>渐趋于定值</strong>，而且JS趋于定值的速度更快。既然趋于定值了，那么<strong>相应的梯度就是0了</strong>。</p>
+<p><img src="/2019/08/06/wgan/distribution.jpeg" alt="distribution"></p>
+<p><img src="/2019/08/06/wgan/kl_js.jpeg" alt="kl_js"></p>
+<p>也就是说，两个<strong>分布越近</strong>，JS产生的梯度就越大。但是真实分布和生成的分布有一定重合的概率有多大呢？请看这篇<a href="https://zhuanlan.zhihu.com/p/25071913" target="_blank" rel="noopener">知乎</a>中关于高维空间的低维流形的介绍。结果就是，两个分布很可能是高维空间中的低维存在，两个低维物体在高维空间的交集仍是低维的，这个交集在高维空间的测度就基本为零（比如两个二维物体在三维空间的交集的体积怎么都是零）。</p>
+<p>D在最优的时候，在优化G的时候就等同于优化JS散度，这样的话，我们就<strong>不能</strong>将<strong>D训练到比较好</strong>。但是，我们又不能将D训练到太差，太差的话，D就没法指导G进行更新了，更新G的时候梯度就不再准确。因此，怎样<strong>平衡</strong>每个stepG和D的<strong>训练程度</strong>是一个很令人头疼的问题。</p>
+<p>WGAN的<a href="https://arxiv.org/pdf/1701.04862.pdf" target="_blank" rel="noopener">前序论文</a>也通过实验验证了梯度消失的问题：</p>
+<p><img src="/2019/08/06/wgan/vanish.png" alt="vanish"></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">在分别训练了DCGAN 1,10,25个epoch之后，固定generator的参数，将discriminator随机初始化重新训练，generator梯度的变化。可以发现，随着discriminator的训练，generator的梯度会逐渐减小（指数减小）。</span><br></pre></td></tr></table></figure>
+</li>
+</ol>
+<h3 id="优化准则-log-D-G-z-带来的梯度不稳定和collapse-mode"><a href="#优化准则-log-D-G-z-带来的梯度不稳定和collapse-mode" class="headerlink" title="优化准则$-log(D(G(z))$ 带来的梯度不稳定和collapse mode"></a>优化准则$-log(D(G(z))$ 带来的梯度不稳定和collapse mode</h3><p>这时G的损失函数为$\mathbb{E}_{x \sim P_{g}}[-\log D(x)]$</p>
+<p>在前一部分我们知道，在判别器最优的情况下（$D(x) = D^*(x)$）：</p>
+<script type="math/tex; mode=display">
+\mathbb{E}_{x \sim P_{data}}\left[\log D^{*}(x)\right]+\mathbb{E}_{x \sim P_{g}}\left[\log \left(1-D^{*}(x)\right)\right]=2 J S\left(P_{data} \| P_{g}\right)-2 \log 2 \label{equation_6}\tag{6}</script><p>通过对KL散度的形式变换可以得到：</p>
+<script type="math/tex; mode=display">
+\begin{aligned} K L\left(P_{g} \| P_{data}\right) &=\mathbb{E}_{x \sim P_{g}}\left[\log \frac{P_{g}(x)}{P_{data}(x)}\right] \\ &=\mathbb{E}_{x \sim P_{g}}\left[\log \frac{P_{g}(x) /\left(P_{data}(x)+P_{g}(x)\right)}{P_{data}(x) /\left(P_{data}(x)+P_{g}(x)\right)}\right] \\ &=\mathbb{E}_{x \sim P_{g}}\left[\log \frac{1-D^{*}(x)}{D^{*}(x)}\right] \\ &=\mathbb{E}_{x \sim P_{g}} \log \left[1-D^{*}(x)\right]-\mathbb{E}_{x \sim P_{g}} \log D^{*}(x) 
+\end{aligned} \label{equation_7}\tag{7}</script><p>由公式$\ref{equation_6}$和$\ref{equation_7}$可以得到：</p>
+<script type="math/tex; mode=display">
+\begin{aligned} \mathbb{E}_{x \sim P_{g}}\left[-\log D^{*}(x)\right] &=K L\left(P_{g} \| P_{data}\right)-\mathbb{E}_{x \sim P_{g}} \log \left[1-D^{*}(x)\right] \\ &=K L\left(P_{g} \| P_{data}\right)-2 J S\left(P_{data} \| P_{g}\right)+2 \log 2+\mathbb{E}_{x \sim P_{data}}\left[\log D^{*}(x)\right] \end{aligned} \label{equation_8}\tag{8}</script><p>去掉上面公式中不含G的项，最后的优化目标变为：</p>
+<script type="math/tex; mode=display">
+K L\left(P_{g} \| P_{data}\right)-2 J S\left(P_{data} \| P_{g}\right) \label{equation_9}\tag{9}</script><p>这个损失函数一方面想要最小化KL，一方面又想最大化JS, 在直观上难以理解。</p>
+<p>此外，由于KL 散度非对称性，对于$K L\left(P_{g} | P_{data}\right)$</p>
+<ul>
+<li>$当 \ P_{data}(x) \rightarrow 0   \ 而 \  P_{g}(x) \rightarrow 1 \  时，K L\left(P_{g} | P_{data}\right) \rightarrow +\infty$ </li>
+<li>$当 \ P_{data}(x) \rightarrow 1   \ 而 \  P_{g}(x) \rightarrow 0 \  时，K L\left(P_{g} | P_{data}\right) \rightarrow 0$</li>
+</ul>
+<p>上面的两种情况对应了两种错误，第一种是生成了错误的样本，第二种是有些应该生成的样本没有生成，可以看出，根据第二种情况，G可以只去拟合真实分布的<strong>部分分布</strong>而<strong>不会受到惩罚</strong>，而生成<strong>错误的样本</strong>则会受到<strong>巨大的惩罚</strong>。如果G按照第二种情况的指示去生成样本就很可能导致<strong>collapse mode</strong>。</p>
+<p>同样的，WGAN的<a href="https://arxiv.org/pdf/1701.04862.pdf" target="_blank" rel="noopener">前序论文</a>也通过实验验证了梯度不稳定的问题：</p>
+<p><img src="/2019/08/06/wgan/explode.png" alt="1565179188175"></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">在分别训练了DCGAN 1,10,25个epoch之后，固定generator的参数，将discriminator随机初始化重新训练，generator梯度的变化。可以发现，随着discriminator的训练，generator的梯度会逐渐增大（指数增大）。</span><br></pre></td></tr></table></figure>
+<h2 id="WGAN介绍"><a href="#WGAN介绍" class="headerlink" title="WGAN介绍"></a>WGAN介绍</h2><h3 id="新的距离定义，Wasserstein距离"><a href="#新的距离定义，Wasserstein距离" class="headerlink" title="新的距离定义，Wasserstein距离"></a>新的距离定义，Wasserstein距离</h3><p>从上文可以看出，不管是JS还是KL距离，两者都有某种不连续性，也就是说当两个分布<strong>距离超过一定程度</strong>的时候，两者都将距离认为是定值。这对于优化两个分布是非常不利的，WGAN定义的距离则更加的合理。</p>
+<p>WGAN使用的距离Wasserstein距离又被称为是Earth-Mover (EM) distance，中文称为搬土距离。可以进行这样简单的理解，A省有三个市A1、A2、A3，这三个市分别有5,2,3吨土，B省有四个市，B1、B2、B3、B4，分别需要1,6,2,1吨土，我们希望A省通过一定的策略将A省拥有的土送往B省，并希望A省制定一个比较好的方案，让A省运输过程消耗最少。</p>
+<p>公式如下：</p>
+<script type="math/tex; mode=display">
+W\left(\mathbb{P}_{r}, \mathbb{P}_{g}\right)=\inf _{\gamma \in \Pi\left(\mathbb{P}_{r}, \mathbb{P}_{g}\right)} \mathbb{E}_{(x, y) \sim \gamma}[\|x-y\|] \label{equation_10}\tag{10}</script><p>可能，有点复杂。其实和搬土是一样的，只不过我们将每个省需要和拥有土量的分布换为了连续的分布$\mathbb{P}_{r}$ 和 $\mathbb{P}_{g}$ 。将某个省某市将土运到另一个省某市这种情况的出现换为了两个分布某个值同时出现，即联合分布。运土的策略有很多，两个边缘分布的联合概率也有很多，在所有的联合概率中寻找使得方程$\ref{equation_10}$值最小的那个，代表的就是Earth-Mover (EM) distance。</p>
+<p>这个距离的度量相对于KL和JS到底好在哪里，我们可以假设这样一个分布：</p>
+<p>P1在线段AB上均匀分布，P2在线段CD上均匀分布，CD的位置由$\theta$来决定，</p>
+<p><img src="/2019/08/06/wgan/dis.jpg" alt="dis"></p>
+<p><img src="/2019/08/06/wgan/theta.png" alt="1565180699575"></p>
+<p>上图分别是，随着$\theta$的变化，W距离和JS距离的变化，可以看出W距离是连续变化的，而JS距离只在$\theta$为0的时候为0，在其他时候都是一个定值。也就是说W距离在这种情况下仍然可以为参数更新提供有用的梯度，而JS距离不行。</p>
+<h3 id="WGAN的具体实现"><a href="#WGAN的具体实现" class="headerlink" title="WGAN的具体实现"></a>WGAN的具体实现</h3><p>公式$\ref{equation_10}$的距离固然优美，但公式中的便利联合分布求下界的部分$\inf _{\gamma \in \Pi\left(\mathbb{P}_{r}, \mathbb{P}_{g}\right)}$却无法求解。作者为了更好的求解，讲公式$\ref{equation_10}$变换为了另一种形式：</p>
+<script type="math/tex; mode=display">
+W\left(P_{r}, P_{g}\right)=\frac{1}{K} \sup _{\|f\|_{L} \leq K} \mathbb{E}_{x \sim P_{r}}[f(x)]-\mathbb{E}_{x \sim P_{g}}[f(x)] \label{equation_11}\tag{11}</script><p>公式$\ref{equation_11}$中$|f|_{L} \leq K$,是指函数f满足常数为K的Lipschitz限制，这要求对于定义域内的任意两个元素$x1$和$x2$满足：</p>
+<script type="math/tex; mode=display">
+\left|f\left(x_{1}\right)-f\left(x_{2}\right)\right| \leq K\left|x_{1}-x_{2}\right|</script><p>也就是说，f的<strong>导数值有上界</strong>。这里W是要在所有的f中找到一个<strong>上界值</strong>。</p>
+<p>遍历公式$\ref{equation_10}$中的联合分布是一个很难的事，但是遍历公式$\ref{equation_11}$中的f却很容易通过神经网络实现，每个神经网络都可以看作是一个映射函数，<strong>遍历神经网络的参数</strong>就相当于遍历所有可能的f。为了找到公式$\ref{equation_11}$的上界，我们可以转换为下面的问题：</p>
+<script type="math/tex; mode=display">
+\max _{w \in \mathcal{W}} \  \mathbb{E}_{x \sim \mathbb{P}_{r}}\left[f_{w}(x)\right]-\mathbb{E}_{z \sim p(z)}\left[f_{w}\left(g_{\theta}(z)\right]\right. \label{equation_12}\tag{12}</script><p>现在重要的问题是，我们遍历参数w的时候<strong>不应是随便遍历</strong>的，在遍历的时候f应<strong>满足Lipschitz连续条件</strong>，因为只有这个时候公式$\ref{equation_11}$的上界才是W距离。</p>
+<p>那么如何实现Lipschitz限制：</p>
+<ul>
+<li><p><strong>Weight Clip（权重剪切）</strong></p>
+<p>作者在第一WGAN的论文中，介绍了通过梯度剪切的方式实现对f的Lipschitz限制的目的。也就是说，如果神经网路f的<strong>所有参数</strong>$w_i$都在某个范围$[-c,c]$内的话，那么<strong>f关于输入样本x的导数</strong>也会在某个范围里面，虽然我们无法确定导数的范围具体是多少，但是只要导数值是有上界的，目的也就达到了。</p>
+</li>
+<li><p><strong>Gradient penalty（梯度惩罚）</strong></p>
+<ul>
+<li><p>weight clipping的问题</p>
+<p>虽然权重剪切确实可以解决Lipschitz限制的问题，但是会有些问题，因为在优化D的时候是在weight clipping的限制下进行的，优化D的目的是为了最大化公式$\ref{equation_12}$，为了达到这个目的，函数可能会尽可能的将参数值推向<strong>参数范围的边界</strong>，也就是<strong>最大值</strong>或<strong>最小值</strong>。这样的话，就大大浪费了深度神经网络的拟合能力。而且如果网络参数都是范围边界值$c$或$-c$的话，$c$比较大的话梯度反传的时候会不断增大，很容易产生梯度爆炸的问题，$c$比较小怎会产生梯度消失的问题。作者也用实验验证了这两个问题：</p>
+<p><img src="/2019/08/06/wgan/problem.png" alt="1565249367016"></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">注：左图是不同Weight clip权重情况下，梯度在反传过程中norm的变化。右图是weight clip和gradient penalty的参数的分布状况（图中weight clip的c设为了0.01）。</span><br></pre></td></tr></table></figure>
+</li>
+</ul>
+</li>
+</ul>
+<ul>
+<li><p>gradient penalty的具体形式 </p>
+<p>既然Lipschitz限制是对导数的，Weight clip对权重限制可以说是走了一个更加曲折的路，gradient penalty则是直接对梯度进行限制。作者这里是对f对于x的梯度的norm做了一个限制，作者希望梯度的norm能够小于一个常数K，这里我们就不妨设K为1.    与上文想法一样，在最大化公式$\ref{equation_12}$的时候，优化器会<strong>把f推向限制的边界</strong>，即f对x梯度的norm为1.（论文里也有一些证明），所以我们就不妨让梯度的norm为1：</p>
+<script type="math/tex; mode=display">
+L=\underset{\tilde{\boldsymbol{x}} \sim \mathbb{P}_{g}}{\mathbb{E}}[D(\tilde{\boldsymbol{x}})]-\underset{\boldsymbol{x} \sim \mathbb{P}_{r}}{\mathbb{E}}[D(\boldsymbol{x})]+\lambda \underset{\hat{\boldsymbol{x}} \sim \mathbb{P}_{\hat{\boldsymbol{x}}}}{\mathbb{E}}\left[\left(\left\|\nabla_{\hat{\boldsymbol{x}}} D(\hat{\boldsymbol{x}})\right\|_{2}-1\right)^{2}\right] \label{equation_13}\tag{13}</script><p>但公式$\ref{equation_13}$的第三部分有个问题，这里是说f对所有的x都满足梯度norm为1。但是我们是不可能遍历一个高维空间的，作者使用了一个比较有效的trick，就是我们只对$P_r$、$P_g$以及两个分布之间的区域做限制就好了。也就是说我们取 $\hat{\boldsymbol{x}} \leftarrow \epsilon \boldsymbol{x}+(1-\epsilon) \tilde{\boldsymbol{x}},\ \epsilon \sim U[0,1]$ 。</p>
+</li>
+</ul>
+<h3 id="WGAN的优势具体体现在哪里"><a href="#WGAN的优势具体体现在哪里" class="headerlink" title="WGAN的优势具体体现在哪里"></a>WGAN的优势具体体现在哪里</h3><ul>
+<li>相对于其他结构更加稳定，对D和G的<strong>结构</strong>没有特别苛刻的限制，<strong>不需要刻意的去平衡D和G的训练</strong>（不存在G的梯度消失和不稳定）。作者在<a href="https://arxiv.org/pdf/1704.00028.pdf" target="_blank" rel="noopener">论文</a>的附录给出了在不同结构的D、G情况下，很多GAN模型都无法维持一致较好的性能，但是WGAN-GP一直都保持着稳定的性能。</li>
+<li>训练过程中，Wasserstein距离距离的值可以作为模型训练的好坏的一个判断标准，Wasserstein距离值越小，说明生成的分布和真实分布越近。（但实际训练过程中，公式$\ref{equation_11}$ 应该是<strong>先上升后下降的</strong>，上升的过程是我们通过优化D使得公式$\ref{equation_11}$ 逐渐能够代表W距离，下降的过程是我们通过D的指导下优化G从而使得生成分布与真实分布越来越接近）</li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/GAN/">GAN</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/08/05/pytorch-tensor/" data-tooltip="Pytorch Tensor Summary" aria-label="NEXT: Pytorch Tensor Summary">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/08/06/wgan/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/08/06/wgan/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/08/06/wgan/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/08/05/pytorch-tensor/" data-tooltip="Pytorch Tensor Summary" aria-label="NEXT: Pytorch Tensor Summary">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/08/06/wgan/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/08/06/wgan/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/08/06/wgan/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#table-of-contents" aria-label="Table of Contents">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/08/06/wgan/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/08/06/wgan/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/08/06/wgan/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

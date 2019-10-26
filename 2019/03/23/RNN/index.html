@@ -1,0 +1,621 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>RNN learning summary - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。\n\nRNN\nWhat is RNN\nRNN是Recurrent Neural Network的缩写，即循环神经网络。\n\nWhy RNN\n为什么要使用RNN，就像世界上的每一件事情的发生都是有原因的。每一个结果都是一步一步随时间演进出来的，我们如果想要推断出最后的结果，就需要之前各个时间点的知识，这就是RNN出现的原因。RNN的输入是一个有序的序列所有这些序列通过RNN最后得出RNN的输出。\n\nHow RNN\n那么怎么实现RNN呢？\n\nRNN前向传播\n上图是RNN的基本结构，RNN每个时间step所对应的网络结构都是一样的。RNN的每一个时间step都有两个输入。一个是当前时间的输入$x_t$, 还有上一个时间的hidden state记为$h_{t-1}$ .这两个输入通过矩阵运算再通过某种非线性函数可以得到当前时刻的$h_{t}$。当然对于不同的任务，可能在每个时间step上还会有一个输出y。如果我们将左图按照时间展开，就会得到下图：\n\n上图中W所指示的曲线表示，所有的time step中用于计算$h_{t}$的权重是共享的。\n当然，和普通的神经网络一样，RNN不仅可以在时间维度上进行延伸，也可以做网络的堆叠，即构造更深层的网络，网络越深，网络的学习能力肯定也会有提升，但RNN一般不用特别深的网路，一般常用的layer个数是二、三、四。如下图。\n\n\nBackpropagation through time\nRNN所用的反向传播算法，有一个专门的命名，叫做Backpropagation through time（BPTT）。\n\n每个时间节点的输出都可以计算出一个loss，最后将这些loss求和，进行回传。那么为什么叫做through time呢？很容易想，因为计算图是在时间维度不断往后延伸的，那么某个time step的输出所算出的loss肯定要不断向前回传直至时间的起点。就如下图所示：\n\n\nBPTT会产生的问题\n我们从上图可以看出，沿时间的回传每次经过一个time step的内部就会乘以一次W。如果我们把W当成实数来看，如果W1，那么多个W连乘梯度会越来越大，从而出现Exploding gradients（梯度爆炸）的问题。\n\nExploding gradients（梯度爆炸）问题的解决\n对于梯度爆炸，我们一般会采用Gradient clipping的方式将梯度限制在某个范围里：\n123grad_norm = np.sum(grad*grad)if grad_norm &gt; threshold:\tgrad *= (threshold / grad_norm)\n当然，梯度爆炸也可以用之后的LSTM得到一定的缓和。\n\n\n\nTruncated Backpropagation through time\n真正在实际应用的时候，并不会像上面所提到的那样直接进行梯度回传。假如我们的序列输入很长，那样回传的话会面临几个问题：\n\n沿时间回传梯度逐渐变小，几乎为0，越往前越没有意义\n序列过长，模型需要经过很长的前向之后才能跟新，模型更新速度慢\n\n所以，新的反向传播方式被提出：\n\n被称为是截断的BPTT，也就是我们不回传的序列的起点，而是只在某个固定的时间长度上回传，如上图。具体的实现细节是这样的。\n在进行算法实现的时候，我们会指定两个参数，$k_1$和$k_2$。算法的伪码如下：\n123456for t from 1 to T do\tRun the RNN for one step,compute loss each step\tif t divides k1 then\t\tRun BPTT, from t down to t − k2\tend ifend for\n也就是说我们的序列长为T，我们不断进行RNN的forward计算，但是每隔$k_1$个step，我们会对参数进行一次更新，每次更新需要使用BPTT的方式，BPTT的计算被限制在当前更新step之前的$k_2$个step。\n\n\n\n\nLSTM  从上面总结可以看出，普通的RNN还是有很多的缺点的。于是人们又提出了LSTM这种改进版的RNN结构。说起LSTM，就必须祭出下面这张非常非常经典的图。\n  \n  从宏观上看，LSTM和普通的RNN没有什么区别，都有$x_t$和$h_t$。不同的就是$h_t$的计算方式和每个RNN的block多了一个输入和输出。下面是LSTM关于$h_t$的计算方式：\n  \n  相比于普通的RNN，LSTM多了个$c_t$, 被称之为cell state。f代表的是forget gate（遗忘门），i代表的是input，o代表的是output，g呢，没有特定的名称。i，f，o，g四个向量的维度都是一样的。\n  \n  从图示中我们可以这样理解：\n\n首先，$x_t$和$h_{t-1}$拼在一起通过矩阵运算计算出四个维度一样的向量f，i，g，o。\n然后f因为是通过了sigmoid的所以取值是0-1.上一个step 的$c_{t-1}$通过和取值位于0-1的f点乘获取输出，遗忘门的意思就是我们要对上一个step 的$c_{t-1}$遗忘多少，然后将剩下的传给下一个step。\n然后i和g点乘加上上一个step被遗忘部分后剩余的$c_{t-1}$变成当前step的 $c_{t}$。\no作为$h_t$输出。\n\nWhy LSTM is better  普通的RNN在进行BPTT的时候要不断乘以W，可能会导致梯度消失或爆炸。\n  \n  但是LSTM在梯度回传的时候除了经过W的那条路之外，还有另外一条路，就是上图细红箭头所示的flow。在这条路上进行回传，梯度的大小就主要取决于f的值了。f对于每个step来说不是常数，效果会比普通的RNN好些。当然f是一个0-1的值，梯度也会不断减小，一般来说，在训练的时候会通过某种初始化是f一开始比较接近于1，这样会加快训练速度。\n  LSTM这种梯度回传的策略其实很像CNN中的resnet。\n  \nGRUGRU是在14年被提出来的，相当于是LSTM的一个变种。\n\n相对于LSTM，每个GRU cell只保留一个状态，那就是 $h_t$，不再有LSTM中的 $c_t$。这使得GRU相对于LSTM会简单一些，和LSTM相似，最后的公式中，直接将 $h_{t-1}$ 作为一项求和可以为反向提供高速公路以减小梯度消失的影响。\n关于RNN训练的tips不管是传统的RNN还是LSTM或者是GRU都比较难以训练，虽然LSTM和GRU在减缓梯度消失方面多做了一些，但是这并不能完全避免梯度的消失。\n所以LSTM和GRU的初始化问题都是很重要的。这个初始化也都是针对梯度消失的，为了防止刚开始训练时候的梯度消失，我们会使LSTM中的 $c_{t-1}$ 和 GRU中的 $h_{t-1}$ 的系数尽量接近于1。在LSTM中，我们所做的就是尽量使forget gate的值为1。为了做到这一点，我们可以将计算forget gate的bias初始化为1或者更大（我们无法对weight做一个好的初始化，因为我们无法知道怎样初始化weight才能让forget gate接近于1.但是调整bias就很直接）。对于GRU我们可以对于相应的bias做同样的初始化，但是不同文章中所用的GRU公式好多都是不同的，具体的情况应该看是什么公式。对于上面的公式我们就应该尽量将计算 $z_t$ 的bias初始化为-1.\n其他的tips，我就不一一说了，具体可以看下这个博客。但是初始话bias这个问题，感觉特别重要，很多文章都有提到，所以在这里特别提一下。下面我用pytorch的代码来展示一下怎样初始化对应的bias。\n1234import mathimport torch as thimport torch.nn as nnimport torch.nn.functional as F\n首先下面这是一个关于RNN的类\n12345678910111213141516171819202122232425class TorchRNN(nn.Module):    def __init__(self,                 feature_dim = 30,                 rnn=\"lstm\",                 num_layers=2,                 hidden_size=512,                 dropout=0.0,                 bidirectional=False):        super(TorchRNN, self).__init__()        RNN = rnn.upper()        supported_rnn = &#123;\"LSTM\": nn.LSTM, \"RNN\": nn.RNN, \"GRU\": nn.GRU&#125;        if RNN not in supported_rnn:            raise RuntimeError(\"unknown RNN type: &#123;&#125;\".format(RNN))        self.rnn = supported_rnn[RNN](            feature_dim,            hidden_size,            num_layers,            batch_first=True,            dropout=dropout,            bidirectional=bidirectional)        self.output_dim = hidden_size if not bidirectional else hidden_size * 2     def forward(self, x, squeeze=False, total_length=None):        x, y = self.rnn(x)        return x\nLSTM forget gate bias初始化从pytorh LSTM的官方文档中我们可以看到LSTM的计算公式，相对于博客上面的公式，pytorch是将输入和上一个隐藏状态的映射weight分开来了。\n\n从下面的输出来看就分别是bias_ih和bias_hh\n12345model = TorchRNN()data = th.randn(4,10,30)out = model(data)print(out.shape)print(model.rnn.__dir__())\n12torch.Size([4, 10, 512])[&apos;__call__&apos;, &apos;__class__&apos;, &apos;__delattr__&apos;, &apos;__dict__&apos;, &apos;__dir__&apos;, &apos;__doc__&apos;, &apos;__eq__&apos;, &apos;__format__&apos;, &apos;__ge__&apos;, &apos;__getattr__&apos;, &apos;__getattribute__&apos;, &apos;__gt__&apos;, &apos;__hash__&apos;, &apos;__init__&apos;, &apos;__init_subclass__&apos;, &apos;__le__&apos;, &apos;__lt__&apos;, &apos;__module__&apos;, &apos;__ne__&apos;, &apos;__new__&apos;, &apos;__reduce__&apos;, &apos;__reduce_ex__&apos;, &apos;__repr__&apos;, &apos;__setattr__&apos;, &apos;__setstate__&apos;, &apos;__sizeof__&apos;, &apos;__str__&apos;, &apos;__subclasshook__&apos;, &apos;__weakref__&apos;, &apos;_all_weights&apos;, &apos;_apply&apos;, &apos;_backend&apos;, &apos;_backward_hooks&apos;, &apos;_buffers&apos;, &apos;_flat_weights&apos;, &apos;_forward_hooks&apos;, &apos;_forward_pre_hooks&apos;, &apos;_get_name&apos;, &apos;_load_from_state_dict&apos;, &apos;_load_state_dict_pre_hooks&apos;, &apos;_modules&apos;, &apos;_named_members&apos;, &apos;_parameters&apos;, &apos;_register_load_state_dict_pre_hook&apos;, &apos;_register_state_dict_hook&apos;, &apos;_slow_forward&apos;, &apos;_state_dict_hooks&apos;, &apos;_tracing_name&apos;, &apos;_version&apos;, &apos;add_module&apos;, &apos;all_weights&apos;, &apos;apply&apos;, &apos;batch_first&apos;, &apos;bias&apos;, &apos;bias_hh_l0&apos;, &apos;bias_hh_l1&apos;, &apos;bias_ih_l0&apos;, &apos;bias_ih_l1&apos;, &apos;bidirectional&apos;, &apos;buffers&apos;, &apos;check_forward_args&apos;, &apos;children&apos;, &apos;cpu&apos;, &apos;cuda&apos;, &apos;double&apos;, &apos;dropout&apos;, &apos;dump_patches&apos;, &apos;eval&apos;, &apos;extra_repr&apos;, &apos;flatten_parameters&apos;, &apos;float&apos;, &apos;forward&apos;, &apos;half&apos;, &apos;hidden_size&apos;, &apos;input_size&apos;, &apos;load_state_dict&apos;, &apos;mode&apos;, &apos;modules&apos;, &apos;named_buffers&apos;, &apos;named_children&apos;, &apos;named_modules&apos;, &apos;named_parameters&apos;, &apos;num_layers&apos;, &apos;parameters&apos;, &apos;register_backward_hook&apos;, &apos;register_buffer&apos;, &apos;register_forward_hook&apos;, &apos;register_forward_pre_hook&apos;, &apos;register_parameter&apos;, &apos;reset_parameters&apos;, &apos;share_memory&apos;, &apos;state_dict&apos;, &apos;to&apos;, &apos;train&apos;, &apos;training&apos;, &apos;type&apos;, &apos;weight_hh_l0&apos;, &apos;weight_hh_l1&apos;, &apos;weight_ih_l0&apos;, &apos;weight_ih_l1&apos;, &apos;zero_grad&apos;]\n在上面我们的隐藏状态的维度是512，而两个bias的维度都是2048.相当于有4个512.这四个就是LSTM的四个gate。pytorch的官方文档也给出了这四个gate在bias中的顺序：  \n\n分别是input gate/forget gate/gate gate/output gate那我们将对应与forget gate位置的bias改为1就可以了。\n12345678print(model.rnn.bias_ih_l0.shape)print(model.rnn.bias_hh_l0.shape)hidden_size = 512for name, param in model.rnn.named_parameters():    if 'bias' in name:        #param.data[hidden_size:hidden_size + hidden_size].fill_(1.0)        nn.init.constant_(param[hidden_size:hidden_size + hidden_size], 1.0)\n12torch.Size([2048])torch.Size([2048])\nGRU 相应 bias初始化从pytorch的GRU官方文档中可以看到，GRU的公式计算如下：\n\n也即是说我们要将zt中对应的bias初始化为1\n12345model = TorchRNN(rnn=\"gru\",)data = th.randn(4,10,30)out = model(data)print(out.shape)print(model.rnn.__dir__())\n12torch.Size([4, 10, 512])[&apos;__call__&apos;, &apos;__class__&apos;, &apos;__delattr__&apos;, &apos;__dict__&apos;, &apos;__dir__&apos;, &apos;__doc__&apos;, &apos;__eq__&apos;, &apos;__format__&apos;, &apos;__ge__&apos;, &apos;__getattr__&apos;, &apos;__getattribute__&apos;, &apos;__gt__&apos;, &apos;__hash__&apos;, &apos;__init__&apos;, &apos;__init_subclass__&apos;, &apos;__le__&apos;, &apos;__lt__&apos;, &apos;__module__&apos;, &apos;__ne__&apos;, &apos;__new__&apos;, &apos;__reduce__&apos;, &apos;__reduce_ex__&apos;, &apos;__repr__&apos;, &apos;__setattr__&apos;, &apos;__setstate__&apos;, &apos;__sizeof__&apos;, &apos;__str__&apos;, &apos;__subclasshook__&apos;, &apos;__weakref__&apos;, &apos;_all_weights&apos;, &apos;_apply&apos;, &apos;_backend&apos;, &apos;_backward_hooks&apos;, &apos;_buffers&apos;, &apos;_flat_weights&apos;, &apos;_forward_hooks&apos;, &apos;_forward_pre_hooks&apos;, &apos;_get_name&apos;, &apos;_load_from_state_dict&apos;, &apos;_load_state_dict_pre_hooks&apos;, &apos;_modules&apos;, &apos;_named_members&apos;, &apos;_parameters&apos;, &apos;_register_load_state_dict_pre_hook&apos;, &apos;_register_state_dict_hook&apos;, &apos;_slow_forward&apos;, &apos;_state_dict_hooks&apos;, &apos;_tracing_name&apos;, &apos;_version&apos;, &apos;add_module&apos;, &apos;all_weights&apos;, &apos;apply&apos;, &apos;batch_first&apos;, &apos;bias&apos;, &apos;bias_hh_l0&apos;, &apos;bias_hh_l1&apos;, &apos;bias_ih_l0&apos;, &apos;bias_ih_l1&apos;, &apos;bidirectional&apos;, &apos;buffers&apos;, &apos;check_forward_args&apos;, &apos;children&apos;, &apos;cpu&apos;, &apos;cuda&apos;, &apos;double&apos;, &apos;dropout&apos;, &apos;dump_patches&apos;, &apos;eval&apos;, &apos;extra_repr&apos;, &apos;flatten_parameters&apos;, &apos;float&apos;, &apos;forward&apos;, &apos;half&apos;, &apos;hidden_size&apos;, &apos;input_size&apos;, &apos;load_state_dict&apos;, &apos;mode&apos;, &apos;modules&apos;, &apos;named_buffers&apos;, &apos;named_children&apos;, &apos;named_modules&apos;, &apos;named_parameters&apos;, &apos;num_layers&apos;, &apos;parameters&apos;, &apos;register_backward_hook&apos;, &apos;register_buffer&apos;, &apos;register_forward_hook&apos;, &apos;register_forward_pre_hook&apos;, &apos;register_parameter&apos;, &apos;reset_parameters&apos;, &apos;share_memory&apos;, &apos;state_dict&apos;, &apos;to&apos;, &apos;train&apos;, &apos;training&apos;, &apos;type&apos;, &apos;weight_hh_l0&apos;, &apos;weight_hh_l1&apos;, &apos;weight_ih_l0&apos;, &apos;weight_ih_l1&apos;, &apos;zero_grad&apos;]\n隐层的状态是512维，而这里的bias维度是1536维，对应的变换相对应的bias位置在pytorch文档中给出：\n\n1234567print(model.rnn.bias_hh_l0.shape)print(model.rnn.bias_ih_l0.shape)for name, param in model.rnn.named_parameters():    if 'bias' in name:        #param.data[hidden_size:hidden_size + hidden_size].fill_(1.0)        nn.init.constant_(param[hidden_size:hidden_size + hidden_size], 1.0)\n12torch.Size([1536])torch.Size([1536])\n","dateCreated":"2019-03-23T10:11:32+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-03-23T10:11:32+08:00","description":"最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。","headline":"RNN learning summary","image":["cover.png","cover.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/03/23/RNN/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/03/23/RNN/","keywords":"RNN","thumbnailUrl":"cover.png"}</script>
+    <meta name="description" content="最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="RNN learning summary">
+<meta property="og:url" content="http://czy97.github.io/2019/03/23/RNN/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/rnn.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/rnn_unroll.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/mutilayer.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/bptt.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/flow.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/t_bptt.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/lstm.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/equation.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/lstm2.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/lstm_bp.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/resnet.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/gru.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/lstmf.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/lstmo.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/gruf.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/gruo.png">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.913Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="RNN learning summary">
+<meta name="twitter:description" content="最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/03/23/RNN/rnn.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/23/RNN/cover.png" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/23/RNN/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/23/RNN/cover.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/03/23/RNN/cover.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            RNN learning summary
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-03-23T10:11:32+08:00">
+	
+		    3月 23, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/Summary/">Summary</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>最近因为要使用LSTM，所以就临时学了下RNN、LSTM和GRU以及LSTM和GRU的初始化问题，并在这里总结一下。</p>
+<a id="more"></a>
+<h1 id="RNN"><a href="#RNN" class="headerlink" title="RNN"></a>RNN</h1><ul>
+<li><p>What is RNN</p>
+<p>RNN是Recurrent Neural Network的缩写，即循环神经网络。</p>
+</li>
+<li><p>Why RNN</p>
+<p>为什么要使用RNN，就像世界上的每一件事情的发生都是有原因的。每一个结果都是一步一步随时间演进出来的，我们如果想要推断出最后的结果，就需要之前各个时间点的知识，这就是RNN出现的原因。RNN的输入是一个有序的序列所有这些序列通过RNN最后得出RNN的输出。</p>
+</li>
+<li><p>How RNN</p>
+<p>那么怎么实现RNN呢？</p>
+<ol>
+<li><p>RNN前向传播<br><img src="/2019/03/23/RNN/rnn.png" alt="rnn"></p>
+<p>上图是RNN的基本结构，RNN每个时间step所对应的<strong>网络结构</strong>都是一样的。RNN的每一个时间step都有两个输入。一个是当前时间的输入$x_t$, 还有上一个时间的hidden state记为$h_{t-1}$ .这两个输入通过矩阵运算再通过某种非线性函数可以得到当前时刻的$h_{t}$。当然对于不同的任务，可能在每个时间step上还会有一个输出y。如果我们将左图按照时间展开，就会得到下图：</p>
+<p><img src="/2019/03/23/RNN/rnn_unroll.png" alt="rnn_unroll"></p>
+<p>上图中W所指示的曲线表示，所有的time step中用于计算$h_{t}$的权重<strong>是共享</strong>的。</p>
+<p>当然，和普通的神经网络一样，RNN不仅可以在时间维度上进行延伸，也可以做<strong>网络的堆叠</strong>，即构造更深层的网络，网络越深，网络的学习能力肯定也会有提升，但RNN一般不用特别深的网路，一般常用的layer个数是二、三、四。如下图。</p>
+<p><img src="/2019/03/23/RNN/mutilayer.png" alt="mutilayer"></p>
+</li>
+<li><p>Backpropagation through time</p>
+<p>RNN所用的反向传播算法，有一个专门的命名，叫做<strong>Backpropagation through time</strong>（BPTT）。</p>
+<p><img src="/2019/03/23/RNN/bptt.png" alt="bptt"></p>
+<p>每个时间节点的输出都可以计算出一个loss，最后将这些loss求和，进行回传。那么为什么叫做<strong>through time</strong>呢？很容易想，因为计算图是在时间维度不断往后延伸的，那么某个time step的输出所算出的loss肯定要不断向前回传直至<strong>时间的起点</strong>。就如下图所示：</p>
+<p><img src="/2019/03/23/RNN/flow.png" alt="flow"></p>
+<ul>
+<li><p>BPTT会产生的问题</p>
+<p>我们从上图可以看出，沿时间的回传每次经过一个time step的内部就会乘以一次W。如果我们把W当成实数来看，如果W<1，那么多个w连乘梯度会越来越小，从而出现vanishing gradients（梯度消失）的问题、如果w>1，那么多个W连乘梯度会越来越大，从而出现Exploding gradients（梯度爆炸）的问题。</1，那么多个w连乘梯度会越来越小，从而出现vanishing></p>
+</li>
+<li><p>Exploding gradients（梯度爆炸）问题的解决</p>
+<p>对于梯度爆炸，我们一般会采用<strong>Gradient clipping</strong>的方式将梯度限制在某个范围里：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">grad_norm = np.sum(grad*grad)</span><br><span class="line"><span class="keyword">if</span> grad_norm &gt; threshold:</span><br><span class="line">	grad *= (threshold / grad_norm)</span><br></pre></td></tr></table></figure>
+<p>当然，梯度爆炸也可以用之后的LSTM得到一定的缓和。</p>
+</li>
+</ul>
+</li>
+<li><p><strong>Truncated</strong> Backpropagation through time</p>
+<p>真正在实际应用的时候，并不会像上面所提到的那样直接进行梯度回传。假如我们的序列输入很长，那样回传的话会面临几个问题：</p>
+<ul>
+<li>沿时间回传梯度逐渐变小，几乎为0，越往前越没有意义</li>
+<li>序列过长，模型需要经过很长的前向之后才能跟新，模型更新速度慢</li>
+</ul>
+<p>所以，新的反向传播方式被提出：</p>
+<p><img src="/2019/03/23/RNN/t_bptt.png" alt="t_bptt"></p>
+<p>被称为是截断的BPTT，也就是我们不回传的序列的起点，而是只在某个固定的时间长度上回传，如上图。具体的实现细节是这样的。</p>
+<p>在进行算法实现的时候，我们会指定两个参数，$k_1$和$k_2$。算法的伪码如下：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">for t from 1 to T do</span><br><span class="line">	Run the RNN for one step,compute loss each step</span><br><span class="line">	if t divides k1 then</span><br><span class="line">		Run BPTT, from t down to t − k2</span><br><span class="line">	end if</span><br><span class="line">end for</span><br></pre></td></tr></table></figure>
+<p>也就是说我们的序列长为T，我们不断进行RNN的forward计算，但是<strong>每隔</strong>$k_1$个step，我们会对参数进行一次更新，每次更新需要使用BPTT的方式，BPTT的计算被限制在当前更新step之前的$k_2$个step。</p>
+</li>
+</ol>
+</li>
+</ul>
+<h1 id="LSTM"><a href="#LSTM" class="headerlink" title="LSTM"></a>LSTM</h1><p>  从上面总结可以看出，普通的RNN还是有很多的缺点的。于是人们又提出了LSTM这种改进版的RNN结构。说起LSTM，就必须祭出下面这张非常非常经典的图。</p>
+<p>  <img src="/2019/03/23/RNN/lstm.png" alt="lstm"></p>
+<p>  从<strong>宏观</strong>上看，LSTM和普通的RNN没有什么区别，都有$x_t$和$h_t$。不同的就是$h_t$的<strong>计算方式</strong>和每个RNN的block多了一个输入和输出。下面是LSTM关于$h_t$的计算方式：</p>
+<p>  <img src="/2019/03/23/RNN/equation.png" alt="equation"></p>
+<p>  相比于普通的RNN，LSTM多了个$c_t$, 被称之为cell state。f代表的是forget gate（遗忘门），i代表的是input，o代表的是output，g呢，没有特定的名称。i，f，o，g四个向量的维度都是一样的。</p>
+<p>  <img src="/2019/03/23/RNN/lstm2.png" alt="lstm2"></p>
+<p>  从图示中我们可以这样理解：</p>
+<ul>
+<li>首先，$x_t$和$h_{t-1}$拼在一起通过矩阵运算计算出四个维度一样的向量f，i，g，o。</li>
+<li>然后f因为是通过了sigmoid的所以取值是<strong>0-1</strong>.上一个step 的$c_{t-1}$通过和取值位于0-1的f<strong>点乘</strong>获取输出，<strong>遗忘门</strong>的意思就是我们要对上一个step 的$c_{t-1}$遗忘多少，然后将剩下的传给下一个step。</li>
+<li>然后i和g点乘加上上一个step被遗忘部分后剩余的$c_{t-1}$变成当前step的 $c_{t}$。</li>
+<li>o作为$h_t$输出。</li>
+</ul>
+<h3 id="Why-LSTM-is-better"><a href="#Why-LSTM-is-better" class="headerlink" title="Why LSTM is better"></a>Why LSTM is better</h3><p>  普通的RNN在进行BPTT的时候要不断乘以W，可能会导致梯度消失或爆炸。</p>
+<p>  <img src="/2019/03/23/RNN/lstm_bp.png" alt="lstm_bp"></p>
+<p>  但是LSTM在梯度回传的时候除了经过W的那条路之外，还有另外一条路，就是上图细红箭头所示的flow。在这条路上进行回传，梯度的大小就主要取决于f的值了。f对于每个step来说不是常数，效果会比普通的RNN好些。当然f是一个0-1的值，梯度也会不断减小，一般来说，在训练的时候会通过某种初始化是f一开始比较接近于1，这样会加快训练速度。</p>
+<p>  LSTM这种梯度回传的策略其实很像CNN中的resnet。</p>
+<p>  <img src="/2019/03/23/RNN/resnet.png" alt="resnet"></p>
+<h1 id="GRU"><a href="#GRU" class="headerlink" title="GRU"></a>GRU</h1><p>GRU是在14年被提出来的，相当于是LSTM的一个变种。</p>
+<p><img src="/2019/03/23/RNN/gru.png" alt="gru"></p>
+<p>相对于LSTM，每个GRU cell只保留一个状态，那就是 $h_t$，不再有LSTM中的 $c_t$。这使得GRU相对于LSTM会简单一些，和LSTM相似，最后的公式中，直接将 $h_{t-1}$ 作为一项求和可以为反向提供高速公路以减小梯度消失的影响。</p>
+<h1 id="关于RNN训练的tips"><a href="#关于RNN训练的tips" class="headerlink" title="关于RNN训练的tips"></a>关于RNN训练的tips</h1><p>不管是传统的RNN还是LSTM或者是GRU都比较难以训练，虽然LSTM和GRU在减缓梯度消失方面多做了一些，但是这并不能完全避免梯度的消失。</p>
+<p>所以LSTM和GRU的<strong>初始化问题</strong>都是很重要的。这个初始化也都是针对梯度消失的，为了防止刚开始训练时候的梯度消失，我们会使LSTM中的 $c_{t-1}$ 和 GRU中的 $h_{t-1}$ 的<strong>系数</strong>尽量接近于1。在LSTM中，我们所做的就是尽量使forget gate的值为1。为了做到这一点，我们可以将计算forget gate的<strong>bias</strong>初始化为1或者更大（我们无法对weight做一个好的初始化，因为我们无法知道怎样初始化weight才能让forget gate接近于1.但是调整bias就很直接）。对于GRU我们可以对于相应的bias做同样的初始化，但是不同文章中所用的GRU公式好多都是不同的，具体的情况应该看是什么公式。对于上面的公式我们就应该尽量将计算 $z_t$ 的bias初始化为-1.</p>
+<p>其他的tips，我就不一一说了，具体可以看下这个<a href="https://danijar.com/tips-for-training-recurrent-neural-networks/" target="_blank" rel="noopener">博客</a>。但是初始话bias这个问题，感觉特别重要，很多文章都有提到，所以在这里特别提一下。下面我用<strong>pytorch的代码</strong>来展示一下怎样初始化对应的bias。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> math</span><br><span class="line"><span class="keyword">import</span> torch <span class="keyword">as</span> th</span><br><span class="line"><span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn</span><br><span class="line"><span class="keyword">import</span> torch.nn.functional <span class="keyword">as</span> F</span><br></pre></td></tr></table></figure>
+<p>首先下面这是一个关于RNN的类</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">TorchRNN</span><span class="params">(nn.Module)</span>:</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span><span class="params">(self,</span></span></span><br><span class="line"><span class="function"><span class="params">                 feature_dim = <span class="number">30</span>,</span></span></span><br><span class="line"><span class="function"><span class="params">                 rnn=<span class="string">"lstm"</span>,</span></span></span><br><span class="line"><span class="function"><span class="params">                 num_layers=<span class="number">2</span>,</span></span></span><br><span class="line"><span class="function"><span class="params">                 hidden_size=<span class="number">512</span>,</span></span></span><br><span class="line"><span class="function"><span class="params">                 dropout=<span class="number">0.0</span>,</span></span></span><br><span class="line"><span class="function"><span class="params">                 bidirectional=False)</span>:</span></span><br><span class="line">        super(TorchRNN, self).__init__()</span><br><span class="line">        RNN = rnn.upper()</span><br><span class="line">        supported_rnn = &#123;<span class="string">"LSTM"</span>: nn.LSTM, <span class="string">"RNN"</span>: nn.RNN, <span class="string">"GRU"</span>: nn.GRU&#125;</span><br><span class="line">        <span class="keyword">if</span> RNN <span class="keyword">not</span> <span class="keyword">in</span> supported_rnn:</span><br><span class="line">            <span class="keyword">raise</span> RuntimeError(<span class="string">"unknown RNN type: &#123;&#125;"</span>.format(RNN))</span><br><span class="line">        self.rnn = supported_rnn[RNN](</span><br><span class="line">            feature_dim,</span><br><span class="line">            hidden_size,</span><br><span class="line">            num_layers,</span><br><span class="line">            batch_first=<span class="literal">True</span>,</span><br><span class="line">            dropout=dropout,</span><br><span class="line">            bidirectional=bidirectional)</span><br><span class="line">        self.output_dim = hidden_size <span class="keyword">if</span> <span class="keyword">not</span> bidirectional <span class="keyword">else</span> hidden_size * <span class="number">2</span> </span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">forward</span><span class="params">(self, x, squeeze=False, total_length=None)</span>:</span></span><br><span class="line">        x, y = self.rnn(x)</span><br><span class="line">        <span class="keyword">return</span> x</span><br></pre></td></tr></table></figure>
+<h3 id="LSTM-forget-gate-bias初始化"><a href="#LSTM-forget-gate-bias初始化" class="headerlink" title="LSTM forget gate bias初始化"></a>LSTM forget gate bias初始化</h3><p>从pytorh LSTM的<a href="https://pytorch.org/docs/stable/nn.html?highlight=lstm#torch.nn.LSTM" target="_blank" rel="noopener">官方文档</a>中我们可以看到LSTM的计算公式，相对于博客上面的公式，pytorch是将输入和上一个隐藏状态的映射weight分开来了。</p>
+<p><img src="/2019/03/23/RNN/lstmf.png" alt="lstm_formula"></p>
+<p>从下面的输出来看就分别是bias_ih和bias_hh</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">model = TorchRNN()</span><br><span class="line">data = th.randn(<span class="number">4</span>,<span class="number">10</span>,<span class="number">30</span>)</span><br><span class="line">out = model(data)</span><br><span class="line">print(out.shape)</span><br><span class="line">print(model.rnn.__dir__())</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">torch.Size([4, 10, 512])</span><br><span class="line">[&apos;__call__&apos;, &apos;__class__&apos;, &apos;__delattr__&apos;, &apos;__dict__&apos;, &apos;__dir__&apos;, &apos;__doc__&apos;, &apos;__eq__&apos;, &apos;__format__&apos;, &apos;__ge__&apos;, &apos;__getattr__&apos;, &apos;__getattribute__&apos;, &apos;__gt__&apos;, &apos;__hash__&apos;, &apos;__init__&apos;, &apos;__init_subclass__&apos;, &apos;__le__&apos;, &apos;__lt__&apos;, &apos;__module__&apos;, &apos;__ne__&apos;, &apos;__new__&apos;, &apos;__reduce__&apos;, &apos;__reduce_ex__&apos;, &apos;__repr__&apos;, &apos;__setattr__&apos;, &apos;__setstate__&apos;, &apos;__sizeof__&apos;, &apos;__str__&apos;, &apos;__subclasshook__&apos;, &apos;__weakref__&apos;, &apos;_all_weights&apos;, &apos;_apply&apos;, &apos;_backend&apos;, &apos;_backward_hooks&apos;, &apos;_buffers&apos;, &apos;_flat_weights&apos;, &apos;_forward_hooks&apos;, &apos;_forward_pre_hooks&apos;, &apos;_get_name&apos;, &apos;_load_from_state_dict&apos;, &apos;_load_state_dict_pre_hooks&apos;, &apos;_modules&apos;, &apos;_named_members&apos;, &apos;_parameters&apos;, &apos;_register_load_state_dict_pre_hook&apos;, &apos;_register_state_dict_hook&apos;, &apos;_slow_forward&apos;, &apos;_state_dict_hooks&apos;, &apos;_tracing_name&apos;, &apos;_version&apos;, &apos;add_module&apos;, &apos;all_weights&apos;, &apos;apply&apos;, &apos;batch_first&apos;, &apos;bias&apos;, &apos;bias_hh_l0&apos;, &apos;bias_hh_l1&apos;, &apos;bias_ih_l0&apos;, &apos;bias_ih_l1&apos;, &apos;bidirectional&apos;, &apos;buffers&apos;, &apos;check_forward_args&apos;, &apos;children&apos;, &apos;cpu&apos;, &apos;cuda&apos;, &apos;double&apos;, &apos;dropout&apos;, &apos;dump_patches&apos;, &apos;eval&apos;, &apos;extra_repr&apos;, &apos;flatten_parameters&apos;, &apos;float&apos;, &apos;forward&apos;, &apos;half&apos;, &apos;hidden_size&apos;, &apos;input_size&apos;, &apos;load_state_dict&apos;, &apos;mode&apos;, &apos;modules&apos;, &apos;named_buffers&apos;, &apos;named_children&apos;, &apos;named_modules&apos;, &apos;named_parameters&apos;, &apos;num_layers&apos;, &apos;parameters&apos;, &apos;register_backward_hook&apos;, &apos;register_buffer&apos;, &apos;register_forward_hook&apos;, &apos;register_forward_pre_hook&apos;, &apos;register_parameter&apos;, &apos;reset_parameters&apos;, &apos;share_memory&apos;, &apos;state_dict&apos;, &apos;to&apos;, &apos;train&apos;, &apos;training&apos;, &apos;type&apos;, &apos;weight_hh_l0&apos;, &apos;weight_hh_l1&apos;, &apos;weight_ih_l0&apos;, &apos;weight_ih_l1&apos;, &apos;zero_grad&apos;]</span><br></pre></td></tr></table></figure>
+<p>在上面我们的隐藏状态的维度是512，而两个bias的维度都是2048.相当于有4个512.这四个就是LSTM的四个gate。pytorch的官方文档也给出了这四个gate在bias中的顺序：  </p>
+<p><img src="/2019/03/23/RNN/lstmo.png" alt="lstmo"></p>
+<p>分别是input gate/forget gate/gate gate/output gate<br>那我们将对应与forget gate位置的bias改为1就可以了。</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">print(model.rnn.bias_ih_l0.shape)</span><br><span class="line">print(model.rnn.bias_hh_l0.shape)</span><br><span class="line"></span><br><span class="line">hidden_size = <span class="number">512</span></span><br><span class="line"><span class="keyword">for</span> name, param <span class="keyword">in</span> model.rnn.named_parameters():</span><br><span class="line">    <span class="keyword">if</span> <span class="string">'bias'</span> <span class="keyword">in</span> name:</span><br><span class="line">        <span class="comment">#param.data[hidden_size:hidden_size + hidden_size].fill_(1.0)</span></span><br><span class="line">        nn.init.constant_(param[hidden_size:hidden_size + hidden_size], <span class="number">1.0</span>)</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">torch.Size([2048])</span><br><span class="line">torch.Size([2048])</span><br></pre></td></tr></table></figure>
+<h3 id="GRU-相应-bias初始化"><a href="#GRU-相应-bias初始化" class="headerlink" title="GRU 相应 bias初始化"></a>GRU 相应 bias初始化</h3><p>从pytorch的GRU<a href="https://pytorch.org/docs/stable/nn.html?highlight=gru#torch.nn.GRU" target="_blank" rel="noopener">官方文档</a>中可以看到，GRU的公式计算如下：</p>
+<p><img src="/2019/03/23/RNN/gruf.png" alt="gruf"></p>
+<p>也即是说我们要将zt中对应的bias初始化为1</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">model = TorchRNN(rnn=<span class="string">"gru"</span>,)</span><br><span class="line">data = th.randn(<span class="number">4</span>,<span class="number">10</span>,<span class="number">30</span>)</span><br><span class="line">out = model(data)</span><br><span class="line">print(out.shape)</span><br><span class="line">print(model.rnn.__dir__())</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">torch.Size([4, 10, 512])</span><br><span class="line">[&apos;__call__&apos;, &apos;__class__&apos;, &apos;__delattr__&apos;, &apos;__dict__&apos;, &apos;__dir__&apos;, &apos;__doc__&apos;, &apos;__eq__&apos;, &apos;__format__&apos;, &apos;__ge__&apos;, &apos;__getattr__&apos;, &apos;__getattribute__&apos;, &apos;__gt__&apos;, &apos;__hash__&apos;, &apos;__init__&apos;, &apos;__init_subclass__&apos;, &apos;__le__&apos;, &apos;__lt__&apos;, &apos;__module__&apos;, &apos;__ne__&apos;, &apos;__new__&apos;, &apos;__reduce__&apos;, &apos;__reduce_ex__&apos;, &apos;__repr__&apos;, &apos;__setattr__&apos;, &apos;__setstate__&apos;, &apos;__sizeof__&apos;, &apos;__str__&apos;, &apos;__subclasshook__&apos;, &apos;__weakref__&apos;, &apos;_all_weights&apos;, &apos;_apply&apos;, &apos;_backend&apos;, &apos;_backward_hooks&apos;, &apos;_buffers&apos;, &apos;_flat_weights&apos;, &apos;_forward_hooks&apos;, &apos;_forward_pre_hooks&apos;, &apos;_get_name&apos;, &apos;_load_from_state_dict&apos;, &apos;_load_state_dict_pre_hooks&apos;, &apos;_modules&apos;, &apos;_named_members&apos;, &apos;_parameters&apos;, &apos;_register_load_state_dict_pre_hook&apos;, &apos;_register_state_dict_hook&apos;, &apos;_slow_forward&apos;, &apos;_state_dict_hooks&apos;, &apos;_tracing_name&apos;, &apos;_version&apos;, &apos;add_module&apos;, &apos;all_weights&apos;, &apos;apply&apos;, &apos;batch_first&apos;, &apos;bias&apos;, &apos;bias_hh_l0&apos;, &apos;bias_hh_l1&apos;, &apos;bias_ih_l0&apos;, &apos;bias_ih_l1&apos;, &apos;bidirectional&apos;, &apos;buffers&apos;, &apos;check_forward_args&apos;, &apos;children&apos;, &apos;cpu&apos;, &apos;cuda&apos;, &apos;double&apos;, &apos;dropout&apos;, &apos;dump_patches&apos;, &apos;eval&apos;, &apos;extra_repr&apos;, &apos;flatten_parameters&apos;, &apos;float&apos;, &apos;forward&apos;, &apos;half&apos;, &apos;hidden_size&apos;, &apos;input_size&apos;, &apos;load_state_dict&apos;, &apos;mode&apos;, &apos;modules&apos;, &apos;named_buffers&apos;, &apos;named_children&apos;, &apos;named_modules&apos;, &apos;named_parameters&apos;, &apos;num_layers&apos;, &apos;parameters&apos;, &apos;register_backward_hook&apos;, &apos;register_buffer&apos;, &apos;register_forward_hook&apos;, &apos;register_forward_pre_hook&apos;, &apos;register_parameter&apos;, &apos;reset_parameters&apos;, &apos;share_memory&apos;, &apos;state_dict&apos;, &apos;to&apos;, &apos;train&apos;, &apos;training&apos;, &apos;type&apos;, &apos;weight_hh_l0&apos;, &apos;weight_hh_l1&apos;, &apos;weight_ih_l0&apos;, &apos;weight_ih_l1&apos;, &apos;zero_grad&apos;]</span><br></pre></td></tr></table></figure>
+<p>隐层的状态是512维，而这里的bias维度是1536维，对应的变换相对应的bias位置在pytorch文档中给出：</p>
+<p><img src="/2019/03/23/RNN/gruo.png" alt="gruo"></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">print(model.rnn.bias_hh_l0.shape)</span><br><span class="line">print(model.rnn.bias_ih_l0.shape)</span><br><span class="line"></span><br><span class="line"><span class="keyword">for</span> name, param <span class="keyword">in</span> model.rnn.named_parameters():</span><br><span class="line">    <span class="keyword">if</span> <span class="string">'bias'</span> <span class="keyword">in</span> name:</span><br><span class="line">        <span class="comment">#param.data[hidden_size:hidden_size + hidden_size].fill_(1.0)</span></span><br><span class="line">        nn.init.constant_(param[hidden_size:hidden_size + hidden_size], <span class="number">1.0</span>)</span><br></pre></td></tr></table></figure>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">torch.Size([1536])</span><br><span class="line">torch.Size([1536])</span><br></pre></td></tr></table></figure>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/RNN/">RNN</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/09/end-to-end-td/" data-tooltip="Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;" aria-label="PREVIOUS: Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/22/general-loss/" data-tooltip="Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;" aria-label="NEXT: Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/23/RNN/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/23/RNN/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/23/RNN/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/09/end-to-end-td/" data-tooltip="Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;" aria-label="PREVIOUS: Paper reading:&#34;End-to-End Text-Dependent Speaker Verification&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/22/general-loss/" data-tooltip="Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;" aria-label="NEXT: Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/23/RNN/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/23/RNN/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/23/RNN/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/23/RNN/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/23/RNN/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/23/RNN/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

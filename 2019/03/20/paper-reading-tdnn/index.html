@@ -1,0 +1,520 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34; - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步原文。\n\n前言对于序列输入，学习序列前后依赖性是很重要的。RNN系列的模型能够很好的对于序列进行建模，但由于RNN的序列输入的本质，使得对于RNN的加速（主要是并行加速）相对于普通的DNN变得很难，因此RNN的训练时长很长。而time delay neural network（TDNN）的出现就是为了折中进行序列建模和训练时间短这两个目标。\nIntroduction这篇文章所介绍的TDNN结构是在之前提出的TDNN结构上的一种改进，虽然TDNN是一种前向网络的架构，但是如果在所有的time steps上计算隐层的激活计算量仍然是很大的。在本文中，作者采用了一种subsampling的方式，只对某些time step进行计算，这中subsampling是建立在所有的输入上下文都会被网络处理的基础上的。\n相较于RNN，TDNN does not impose any relationship between the length of input-context (i.e., unfolding width used during training, in case of RNNs) and number sequential steps during training. 自己虽然之前了解过RNN和lstm，但现在有些记忆模糊了，等再做了解之后再对这句话做诠释和理解。\nTDNN Neural network architecture对于一般的DNN在处理上下文时，想法一般是这样的。比如我们想提取具有上下文分别7帧共15帧的特征表达，我们一般会将这15帧的特征直接拼起来，形成一个15*F（F是我们每一帧的特征维度）的特征，然后去学习15*F的特征映射。\n而对于TDNN来说不是这样做的，假如我们最后仍然想获取时序上15帧上下文的特征表达。在TDNN的初始层中，会处理比15帧更加窄的时序上下文，然后送入更深的网络。很容易理解，更深的网络的时间分辨率是比底层网络要长的。也就是说，我们将“获取时序上15帧上下文的特征”这个目标交给了更深的网络去完成，而不是用一层网络来完成。 如下图，最下面一层的时间分辨率为5，而最上层的时间分别率是23.\n\n此外，TDNN在同一层，不同time steps上的这个transform参数都是共享的（类似于CNN中的卷积核在整张map上的参数共享）。所以对于TDNN来说，其中的一个超参数就是每一层的input context。\nTDNN subsampling从上图可以看出，TDNN临近time step的特征（非输入层）是有很大的context重叠的。假定这些相邻的time step特征之间是相关的，我们在进行特征拼接输入下一层的时候是不必拼接紧挨着的time step的。也就是说我们可以隔几个time step进行拼接。这些做的话，如上图，红线所示的路径就是我们最后需要计算的部分。\n此外在这个文章的TDNN的结构中，用的是非对称的上下文，也就是说当前帧之前取13帧，当前帧之后取9帧，这可以降低实时解码的延迟（减少对于未来帧的使用）\n","dateCreated":"2019-03-20T15:08:13+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-03-20T15:08:13+08:00","description":"TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步原文。","headline":"Paper reading:\"A time delay neural network architecture for efficient modeling of long temporal contexts\"","image":["seq.jpeg","tdnn_caption.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/03/20/paper-reading-tdnn/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/03/20/paper-reading-tdnn/","keywords":"TDNN","thumbnailUrl":"seq.jpeg"}</script>
+    <meta name="description" content="TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步原文。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Paper reading:&quot;A time delay neural network architecture for efficient modeling of long temporal contexts&quot;">
+<meta property="og:url" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步原文。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/tdnn.png">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.988Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Paper reading:&quot;A time delay neural network architecture for efficient modeling of long temporal contexts&quot;">
+<meta name="twitter:description" content="TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步原文。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/tdnn.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/seq.jpeg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/seq.jpeg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/tdnn_caption.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/20/paper-reading-tdnn/tdnn_caption.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/03/20/paper-reading-tdnn/tdnn_caption.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34;
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-03-20T15:08:13+08:00">
+	
+		    3月 20, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/paperReading/">paperReading</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>TDNN在序列建模领域好像已经出现很久了，但自己之前一直没有了解，这篇博文只对文中TDNN的部分做以记录和理解，全文的内容还请移步<a href="http://speak.clsp.jhu.edu/uploads/publications/papers/1048_pdf.pdf" target="_blank" rel="noopener">原文</a>。</p>
+<a id="more"></a>
+<h4 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h4><p>对于序列输入，学习序列<strong>前后依赖性</strong>是很重要的。RNN系列的模型能够很好的对于序列进行建模，但由于RNN的序列输入的本质，使得对于RNN的加速（主要是<strong>并行加速</strong>）相对于普通的DNN变得很难，因此RNN的<strong>训练时长</strong>很长。而time delay neural network（TDNN）的出现就是为了折中进行序列建模和训练时间短这两个目标。</p>
+<h3 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h3><p>这篇文章所介绍的TDNN结构是在之前提出的TDNN结构上的一种<strong>改进</strong>，虽然TDNN是一种前向网络的架构，但是如果在所有的time steps上计算隐层的激活<strong>计算量仍然是很大</strong>的。在本文中，作者采用了一种subsampling的方式，只对某些time step进行计算，这中subsampling是建立在<strong>所有的输入上下文</strong>都会被网络处理的基础上的。</p>
+<p>相较于RNN，TDNN does not impose any relationship between the length of input-context (i.e., unfolding width used during training, in case of RNNs) and number sequential steps during training. 自己虽然之前了解过RNN和lstm，但现在有些记忆模糊了，等再做了解之后再对这句话做诠释和理解。</p>
+<h3 id="TDNN-Neural-network-architecture"><a href="#TDNN-Neural-network-architecture" class="headerlink" title="TDNN Neural network architecture"></a>TDNN Neural network architecture</h3><p>对于<strong>一般的DNN</strong>在处理上下文时，想法一般是这样的。比如我们想提取具有上下文分别7帧共15帧的特征表达，我们一般会将这15帧的特征直接拼起来，形成一个15*F（F是我们每一帧的特征维度）的特征，然后去学习15*F的特征映射。</p>
+<p>而对于<strong>TDNN</strong>来说不是这样做的，假如我们最后仍然想获取时序上15帧上下文的特征表达。在TDNN的初始层中，会处理比15帧更加窄的时序上下文，然后送入更深的网络。很容易理解，更深的网络的<strong>时间分辨率</strong>是比底层网络要长的。也就是说，我们将“获取时序上15帧上下文的特征”这个目标交给了<strong>更深的网络去完成</strong>，而不是用一层网络来完成。 如下图，最下面一层的时间分辨率为5，而最上层的时间分别率是23.</p>
+<p><img src="/2019/03/20/paper-reading-tdnn/tdnn.png" alt="tdnn"></p>
+<p>此外，TDNN在同一层，不同time steps上的这个transform<strong>参数</strong>都是<strong>共享</strong>的（类似于<strong>CNN</strong>中的<strong>卷积核</strong>在整张map上的参数共享）。所以对于TDNN来说，其中的一个<strong>超参数</strong>就是每一层的input context。</p>
+<h3 id="TDNN-subsampling"><a href="#TDNN-subsampling" class="headerlink" title="TDNN subsampling"></a>TDNN subsampling</h3><p>从上图可以看出，TDNN临近time step的特征（非输入层）是有很大的<strong>context重叠</strong>的。假定这些相邻的time step特征之间是相关的，我们在进行特征拼接输入下一层的时候是不必拼接紧挨着的time step的。也就是说我们可以<strong>隔几个time step</strong>进行拼接。这些做的话，如上图，红线所示的路径就是我们最后需要计算的部分。</p>
+<p>此外在这个文章的TDNN的结构中，用的是<strong>非对称的上下文</strong>，也就是说当前帧之前取13帧，当前帧之后取9帧，这可以降低实时解码的延迟（减少对于未来帧的使用）</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/TDNN/">TDNN</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/22/general-loss/" data-tooltip="Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;" aria-label="PREVIOUS: Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/19/paper-reading-xvector/" data-tooltip="Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34;" aria-label="NEXT: Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/22/general-loss/" data-tooltip="Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;" aria-label="PREVIOUS: Paper reading:&#34;GENERALIZED END-TO-END LOSS FOR SPEAKER VERIFICATION&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/19/paper-reading-xvector/" data-tooltip="Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34;" aria-label="NEXT: Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34;">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/20/paper-reading-tdnn/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/20/paper-reading-tdnn/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/20/paper-reading-tdnn/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/20/paper-reading-tdnn/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

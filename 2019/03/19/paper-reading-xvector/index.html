@@ -1,0 +1,618 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34; - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"这是一片对于论文X-VECTORS的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。\n\n近些年来，在说话人领域越来越多的文章提到embedding这个词。用深度学习网络所提取的说话人embedding与之前的说话人i-vector是一样的。都希望将说话人通过映射到一个向量空间，在这个空间里，同一个说话人的speech映射得到的embedding距离会比较近，而不同说话人的speech映射得到的embedding距离尽可能远，也就是说我们希望这些特征更加的可区分。在这篇文章中，作者使用TDNN和statistic pooling这两种结构将变长的语音特征输入转化为了定长的embedding。\nx-vector这篇文章其实是David Snyder等人在他们之前的工作 ‘’Deep Neural Network Embeddings for Text-Independent Speaker Verificatio‘’ 基础上所做的进一步工作，在这里，我们把这两篇文章都说一下。在一下的文章中我们简称之前的那篇文章问x-vector1，题目所给的这篇文章为x-vector2。\nIntroduction在x-vector1中作者提出，已经有人在大数据上利用深度神经网络取得了很好的效果（这一点也与数据量对深度学习的影响很大这个观点很符合），但这些大型的数据一般都是公司私自的数据，所以x-vector1可以说是一次在已有公共数据集上的说话人文本无关任务的探索。而且对于实际情况的考虑，由于延迟或者为了进行说话人的实时验证，测试时能够使用的说话人音频长度是有限的，所以在这两篇论文中都对于不同的长度的test segment的语音进行了测试。此外，根据之前的诸多研究发现，embedding比i-vector能够更好的利用大量的数据，在x-vector2中作者还探索了数据增广对于系统的作用。\nBaseline system\n以20维mfcc特征加delta和delta-delta之后组成的60维特征为输入的i-vector系统\n以20维mfcc特征加delta再加上在Fisher English corpus上训练的60维bottleneck特征组成的100维特征作为输入的i-vector系统（只在xvector2中有）\n\nxvector系统结构\n\n第一层相当于splice 5 (每一帧拼接前后两帧)之后作为输入。这里用TDNN来实现\n第二层也是用TDNN来实现，只不过这里拼接的不是连续的几帧，而是相隔的。这样做是为了减少重复运算，因为有些帧对应的context是重叠的。这种拼接的方式就是为了让拼接起来的每一帧的context没有重叠。\n这样以来，到了四五层的时候每1帧的实际上下文是15帧.\n由于语音通常不具有相同的输入长度，所以stats pooling用于计算所有输入帧的均值和方差，并将这两个统计量拼接起来作为之后的输入。\n最后可以将segment6或segment7作为最后说话人对应的embedding\n\nTDNN结构图（x-vector所用的参数和这个图略有不同）：\n\n打分策略这里的x-vector系统和i-vector是一样的，只做说话人级别的特征提取。最后我们使用LDA对特征进行降维在用PLDA进行打分。\n实验\nxvector1\n训练集（i-vector和xvector):部分SWBD以及SRE2004-2006\n训练集（PLDA-based backends）：只用SRE\n验证集：SRE10和SRE16（非英语），其中SRE16的enroll speech是60s，test speech在10s到60s之间分布。SRE分两种情况：\nenroll 和 test都是10s（在图表中的标记是10s-10s）\nenroll是full length，test的长度属于{5, 10, 20, 60}\n\n\n网络的segment6或segment7都可以作为embedding，分别记为embedding a和embedding b\n所有实验的融合(fusion)方式都是score 的平均\n\n\nxvector2\n训练集（i-vector和xvector):部分SWBD以及SRE2004-2010和Mixer 6\n训练集（PLDA-based backends）：只用SRE和Mixer 6\n验证集：SITW和SRE16的Cantonese部分\nSITW：英语说话者、entoll和test：6–240 seconds\nSRE16：粤语、enroll：60s    test：10–60s\n\n\nxvector将segment6作为embedding\n相较于xvector1，xvector2还做了data augmentation的实验。分别或者同时对extractor（UBM/T or embedding DNN）和 PLDA classifier做data augmentation\n\n\n\n实验结果\nxvector1\n\nSRE10上的结果\n\n从SRE10上的结果可以看出，i-vector在长时间的test集上的性能仍然是很好的，比embedding还要好一些。而当test所用的语音时长变短的时候embedding变得越来越好。而且embedding和i-vector是互补的，当两者进行fusion的时候，结果会变得更好。\n\nSRE16上的结果\n\n从上面的结果可以看出，embedding在跨语言方面的有着更大的优势。\n\n\n\nxvector2\n\n\n\n\n第一栏\n\n没有经过数据增广的训练，i-vector（BNF）在SITW上表现良好\n但是经英语数据集训练的i-vector（BNF）无法在非英语数据集上取的良好的表现\n\n\n第二栏\n对于PLDA训练数据的增广，对于实验有着很大的帮助\n\n第三栏\n\n对于i-vector系统的数据增广训练没有对系统有帮助\n对于x-vector系统的数据增广训练带来的提升超过了plda部分的数据增广训练\n数据增广似乎只对有监督的训练有效\n\n\n第四栏\n对PLDA和extractor系统都做数据增广，x-vector系统的性能提升很大\n\n\n实验结论\nxvector1\n\nxvector能更好的对于短语音建模\n关于原因，我是这样理解的。之前有篇文章提到过i-vector系统的duration-mismatch。也就是说，如果训练i-vector系统的时候用的是长语音，而提取的时候用的是短语音，就会产生mismatch。原因是这样的，UBM和i-vector可以看成是对音素建模的，每个UBM的高斯可以看成是一种音素的分布（当然毕竟不是有监督训练，我们只能这样看，严谨的来说这样是不准确的）。语音过于短的话相应的音素可能就没有被包含，那么i-vector中对这个音素进行表达的相应维度的值就会很小。实验也证实了短语音的i-vector的模长会更小。\n\nxvector对于domain mismatch更加鲁棒（跨语言）\n我对于这个原因的理解同上面。i-vector对于音素建模，不同语言的音素会有差异，可能会导致i-vector的性能不佳。\n\n最后作者认为，PLDA对于embedding来说应该不是一个好的度量方式（个人理解是，PLDA有着高斯分布的假设，而embedding的分布不一定是高斯的）。作者希望能够用一个end-end的结构对最后的结果进行评判。\n\n\n\nxvector2\n\n数据增广的方法似乎只对有监督的方法有效，对于i-vector系统的帮助并不是很大。\nBNF特征对于i-vector的系统帮助是很大的，但是相对于传统i-vector，加入BNF之后计算复杂度会增大很多。而且BNF对于数据有着比较严格的要求，需要数据有转录的文本。而且BNF在domain之间的适应性不是很好，需要大量的in-domain数据进行训练\n相较于BNF，x-vector只需要有说话人标注的数据即可，而且数据增广对于xvector系统的提升有着很大的帮助。\n\n\n\n","dateCreated":"2019-03-19T17:41:15+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-03-19T17:41:15+08:00","description":"这是一片对于论文X-VECTORS的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。","headline":"Paper reading:\"X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION\"","image":["embedding.png","vector.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/03/19/paper-reading-xvector/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/03/19/paper-reading-xvector/","keywords":"TDNN, SRE, EMBEDDING, DNN","thumbnailUrl":"embedding.png"}</script>
+    <meta name="description" content="这是一片对于论文X-VECTORS的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Paper reading:&quot;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&quot;">
+<meta property="og:url" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="这是一片对于论文X-VECTORS的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/xvector_structure.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/tdnn.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/xvector1_1.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/xvector1_2.png">
+<meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/xvector2.png">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.997Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Paper reading:&quot;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&quot;">
+<meta name="twitter:description" content="这是一片对于论文X-VECTORS的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/xvector_structure.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/embedding.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/embedding.png" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/vector.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/03/19/paper-reading-xvector/vector.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    "
+             style="background-image:url('/2019/03/19/paper-reading-xvector/vector.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Paper reading:&#34;X-VECTORS: ROBUST DNN EMBEDDINGS FOR SPEAKER RECOGNITION&#34;
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-03-19T17:41:15+08:00">
+	
+		    3月 19, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/paperReading/">paperReading</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>这是一片对于论文<a href="https://www.danielpovey.com/files/2018_icassp_xvectors.pdf" target="_blank" rel="noopener">X-VECTORS</a>的阅读笔记，虽然NLP和CV领域的全部江山几乎已经被深度学习占据，而在SRE领域传统方法仍有这一定的地位，我认为这篇文章是深度神经网络在SRE领域的一个很好的应用。</p>
+<a id="more"></a>
+<p>近些年来，在说话人领域越来越多的文章提到embedding这个词。用深度学习网络所提取的说话人embedding与之前的说话人i-vector是一样的。都希望将说话人通过映射到一个向量空间，在这个空间里，同一个说话人的speech映射得到的embedding距离会比较近，而不同说话人的speech映射得到的embedding距离尽可能远，也就是说我们希望这些特征更加的可区分。在这篇文章中，作者使用<a href="https://www.danielpovey.com/files/2015_interspeech_multisplice.pdf" target="_blank" rel="noopener">TDNN</a>和statistic pooling这两种结构将变长的语音特征输入转化为了定长的embedding。</p>
+<p>x-vector这篇文章其实是David Snyder等人在他们之前的工作 ‘’<a href="http://danielpovey.com/files/2017_interspeech_embeddings.pdf" target="_blank" rel="noopener">Deep Neural Network Embeddings for Text-Independent Speaker Verificatio</a>‘’ 基础上所做的进一步工作，在这里，我们把这两篇文章都说一下。在一下的文章中我们简称之前的那篇文章问x-vector1，题目所给的这篇文章为x-vector2。</p>
+<h3 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h3><p>在x-vector1中作者提出，已经有人在<strong>大数据</strong>上利用深度神经网络取得了很好的效果（这一点也与数据量对深度学习的影响很大这个观点很符合），但这些大型的数据一般都是公司私自的数据，所以x-vector1可以说是一次在已有<strong>公共数据集</strong>上的说话人<strong>文本无关</strong>任务的探索。而且对于实际情况的考虑，由于延迟或者为了进行说话人的实时验证，测试时能够使用的说话人音频长度是有限的，所以在这两篇论文中都对于不同的长度的test segment的语音进行了测试。此外，根据之前的诸多研究发现，embedding比i-vector能够更好的利用<strong>大量的数据</strong>，在x-vector2中作者还探索了<strong>数据增广</strong>对于系统的作用。</p>
+<h3 id="Baseline-system"><a href="#Baseline-system" class="headerlink" title="Baseline system"></a>Baseline system</h3><ul>
+<li>以20维mfcc特征加delta和delta-delta之后组成的60维特征为输入的i-vector系统</li>
+<li>以20维mfcc特征加delta再加上在Fisher English corpus上训练的60维<strong>bottleneck</strong>特征组成的100维特征作为输入的i-vector系统（只在xvector2中有）</li>
+</ul>
+<h3 id="xvector系统结构"><a href="#xvector系统结构" class="headerlink" title="xvector系统结构"></a>xvector系统结构</h3><p><img src="/2019/03/19/paper-reading-xvector/xvector_structure.png" alt="xvector_structure"></p>
+<ul>
+<li>第一层相当于splice 5 (每一帧拼接前后两帧)之后作为输入。这里用TDNN来实现</li>
+<li>第二层也是用TDNN来实现，只不过这里拼接的不是连续的几帧，而是相隔的。这样做是为了减少重复运算，因为有些帧对应的context是重叠的。这种拼接的方式就是为了让拼接起来的每一帧的context没有重叠。</li>
+<li>这样以来，到了四五层的时候每1帧的实际上下文是15帧.</li>
+<li>由于语音通常不具有相同的输入长度，所以stats pooling用于计算所有输入帧的<strong>均值</strong>和<strong>方差</strong>，并将这两个统计量拼接起来作为之后的输入。</li>
+<li>最后可以将segment6或segment7作为最后说话人对应的embedding</li>
+</ul>
+<p>TDNN结构图（x-vector所用的参数和这个图略有不同）：</p>
+<p><img src="/2019/03/19/paper-reading-xvector/tdnn.png" alt="tdnn"></p>
+<h3 id="打分策略"><a href="#打分策略" class="headerlink" title="打分策略"></a>打分策略</h3><p>这里的x-vector系统和i-vector是一样的，只做说话人级别的特征提取。最后我们使用LDA对特征进行降维在用PLDA进行打分。</p>
+<h3 id="实验"><a href="#实验" class="headerlink" title="实验"></a>实验</h3><ol>
+<li>xvector1<ul>
+<li>训练集（i-vector和xvector):部分SWBD以及SRE2004-2006</li>
+<li>训练集（PLDA-based backends）：只用SRE</li>
+<li>验证集：SRE10和SRE16（<strong>非英语</strong>），其中SRE16的enroll speech是60s，test speech在10s到60s之间分布。SRE分两种情况：<ul>
+<li>enroll 和 test都是10s（在图表中的标记是10s-10s）</li>
+<li>enroll是full length，test的长度属于{5, 10, 20, 60}</li>
+</ul>
+</li>
+<li>网络的segment6或segment7都可以作为embedding，分别记为embedding a和embedding b</li>
+<li>所有实验的融合(fusion)方式都是score 的平均</li>
+</ul>
+</li>
+<li>xvector2<ul>
+<li>训练集（i-vector和xvector):部分SWBD以及SRE2004-2010和Mixer 6</li>
+<li>训练集（PLDA-based backends）：只用SRE和Mixer 6</li>
+<li>验证集：SITW和SRE16的Cantonese部分<ul>
+<li>SITW：英语说话者、entoll和test：6–240 seconds</li>
+<li>SRE16：粤语、enroll：60s    test：10–60s</li>
+</ul>
+</li>
+<li>xvector将segment6作为embedding</li>
+<li>相较于xvector1，xvector2还做了data augmentation的实验。分别或者同时对extractor（UBM/T or embedding DNN）和 PLDA classifier做data augmentation</li>
+</ul>
+</li>
+</ol>
+<h3 id="实验结果"><a href="#实验结果" class="headerlink" title="实验结果"></a>实验结果</h3><ol>
+<li><p>xvector1</p>
+<ul>
+<li><p>SRE10上的结果</p>
+<p><img src="/2019/03/19/paper-reading-xvector/xvector1_1.png" alt="xvector1_1"></p>
+<p>从SRE10上的结果可以看出，i-vector在<strong>长时间</strong>的test集上的性能仍然是很好的，比embedding还要好一些。而当test所用的语音时长<strong>变短</strong>的时候embedding变得越来越好。而且embedding和i-vector是互补的，当两者进行fusion的时候，结果会变得更好。</p>
+</li>
+<li><p>SRE16上的结果</p>
+<p><img src="/2019/03/19/paper-reading-xvector/xvector1_2.png" alt="xvector1_2"></p>
+<p>从上面的结果可以看出，embedding在<strong>跨语言</strong>方面的有着更大的优势。</p>
+</li>
+</ul>
+</li>
+<li><p>xvector2</p>
+<p><img src="/2019/03/19/paper-reading-xvector/xvector2.png" alt="xvector2"></p>
+</li>
+</ol>
+<ul>
+<li><p>第一栏</p>
+<ul>
+<li>没有经过数据增广的训练，i-vector（BNF）在SITW上表现良好</li>
+<li>但是经<strong>英语</strong>数据集<strong>训练</strong>的i-vector（BNF）无法在<strong>非英语</strong>数据集上取的良好的表现</li>
+</ul>
+</li>
+<li><p>第二栏</p>
+<p>对于PLDA训练数据的增广，对于实验有着很大的帮助</p>
+</li>
+<li><p>第三栏</p>
+<ul>
+<li>对于i-vector系统的数据增广训练没有对系统有帮助</li>
+<li>对于x-vector系统的数据增广训练带来的提升超过了plda部分的数据增广训练</li>
+<li>数据增广似乎只对<strong>有监督</strong>的训练有效</li>
+</ul>
+</li>
+<li><p>第四栏</p>
+<p>对PLDA和extractor系统都做数据增广，x-vector系统的性能提升很大</p>
+</li>
+</ul>
+<h3 id="实验结论"><a href="#实验结论" class="headerlink" title="实验结论"></a>实验结论</h3><ol>
+<li><p>xvector1</p>
+<ul>
+<li><p>xvector能更好的对于<strong>短语音</strong>建模</p>
+<p>关于原因，我是这样理解的。之前<a href="https://www.utdallas.edu/~jxh052100/Publications/CP-ICASSP13-HasanSaeidiHansenLeeuwen-DurationSID-0007663.pdf" target="_blank" rel="noopener">有篇文章</a>提到过i-vector系统的<strong>duration-mismatch</strong>。也就是说，如果训练i-vector系统的时候用的是<strong>长语音</strong>，而提取的时候用的是<strong>短语音</strong>，就会产生mismatch。原因是这样的，UBM和i-vector可以看成是对<strong>音素</strong>建模的，每个UBM的高斯可以看成是一种音素的分布（当然毕竟不是有监督训练，我们只能这样看，严谨的来说这样是不准确的）。语音过于短的话相应的音素可能就没有被包含，那么i-vector中对这个音素进行表达的相应维度的值就会很小。实验也证实了短语音的i-vector的<strong>模长</strong>会更小。</p>
+</li>
+<li><p>xvector对于domain mismatch更加鲁棒（<strong>跨语言</strong>）</p>
+<p>我对于这个原因的理解同上面。i-vector对于<strong>音素</strong>建模，不同语言的音素会有差异，可能会导致i-vector的性能不佳。</p>
+</li>
+<li><p>最后作者认为，PLDA对于embedding来说应该不是一个好的度量方式（个人理解是，PLDA有着高斯分布的假设，而embedding的分布不一定是高斯的）。作者希望能够用一个end-end的结构对最后的结果进行评判。</p>
+</li>
+</ul>
+</li>
+<li><p>xvector2</p>
+<ul>
+<li><strong>数据增广</strong>的方法似乎只对<strong>有监督</strong>的方法<strong>有效</strong>，对于i-vector系统的帮助并不是很大。</li>
+<li>BNF特征对于i-vector的系统帮助是很大的，但是相对于传统i-vector，加入BNF之后计算复杂度会增大很多。而且BNF对于数据有着比较严格的要求，需要数据有转录的文本。而且BNF在domain之间的适应性不是很好，需要大量的in-domain数据进行训练</li>
+<li>相较于BNF，x-vector只需要有说话人标注的数据即可，而且数据增广对于xvector系统的提升有着很大的帮助。</li>
+</ul>
+</li>
+</ol>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/DNN/">DNN</a> <a class="tag tag--primary tag--small t-link" href="/tags/EMBEDDING/">EMBEDDING</a> <a class="tag tag--primary tag--small t-link" href="/tags/SRE/">SRE</a> <a class="tag tag--primary tag--small t-link" href="/tags/TDNN/">TDNN</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/20/paper-reading-tdnn/" data-tooltip="Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34;" aria-label="PREVIOUS: Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/19/Speaker-Recognition/" data-tooltip="Speaker-Recognition" aria-label="NEXT: Speaker-Recognition">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/20/paper-reading-tdnn/" data-tooltip="Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34;" aria-label="PREVIOUS: Paper reading:&#34;A time delay neural network architecture for efficient modeling of long temporal contexts&#34;">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/03/19/Speaker-Recognition/" data-tooltip="Speaker-Recognition" aria-label="NEXT: Speaker-Recognition">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/19/paper-reading-xvector/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/03/19/paper-reading-xvector/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/03/19/paper-reading-xvector/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/03/19/paper-reading-xvector/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

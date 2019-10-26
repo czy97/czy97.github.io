@@ -1,0 +1,585 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Loss summary in Speaker recognition - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。\n\nSoftmax-cross_entropy Loss这个loss的公式和种种就不在这里多说了，作为分类任务的经典loss，softmax是必不可少的。接下来主要分析一下这个loss用于说话人识别end-to-end系统中作为loss的优点和缺点。\n\n优点\n优点的话就是简单，完全不用自己动手去写代码，基本上所有的框架都有现成的函数供使用者使用。\n\n缺点\n\n扩展性不好。也就是说，如果我有两个说话人，我得搭建一个分类两个说话人的网络，如果有三个说话人，这个时候我就得换另外一个网络。这是很麻烦的一件事。当然可以只换最后一层。\n网络大小随着说话人个数的增加线性增加。很明显，最后网络的参数数量是会加上最后一层的参数个数乘以分类的说话人个数。有几百个几千个说话人确实都不算什么。但有的数据集就是会有几十万个说话人，只是最后一层的映射估计就要有几百万甚至几千万几亿的参数，这个问题是很大的。但是大的数据集对于模型的好处大家都是知道的，所以这个问题必须得到解决。\n\n\n\nTriplet Loss这个loss最初是在CV的一篇论文中被提到的，为了计算这个loss，每次训练我们会sample一个三元组$(x^a_i,x^p_i,x^n_i)$ 分别是anchor，positive，和negative样本。positive样本和anchor样本属于同一个类别，而negative样本和anchor样本属于不同的类别。\n首先我们会通过一个网络得到这三个样本的embedding：$(f(x^a_i),f(x^p_i),f(x^n_i))$, 而且我们希望经过训练之后positive样本能够离anchor更近，negative样本会离anchor样本更远。\n\n通过数学的表达是就是positive和anchor的距离在加上一个margin alpha之后小于negative和anchor的距离：\n\n||f(x^a_i)-f(x^p_i)||^2_2+\\alpha < ||f(x^a_i)-f(x^n_i)||^2_2论文将Loss定义为：\n\nL = \\Sigma ^N_i\\left[||f(x^a_i)-f(x^p_i)||^2_2 - ||f(x^a_i)-f(x^n_i)||^2_2+\\alpha \\right]_+\n优点\n同时减小intra class距离和增大inter class距离\n\n缺点\n对于采样策略敏感，需要花功夫制定恰当的采样策略\n\n\nTuple LossTuple Loss是在谷歌这篇论文中用到的。Tuple loss的提出是为了模拟说话人验证的过程，说话人验证的过程是这样的，我们通过N个enroll的utterance训练一个说话人的模型，然后来了一个test utterance，我们通过训练好的这个模型对test utterance进行打分，然后通过一个得分的阈值来判断这个test和几个enroll的utterance是不是属于同一个说话人。Tuple loss的做法是这样的，对于一次训练样本，我们sample一个tuple: $(x_{jl},(x_{j,i_1},…,x_{j,i_P}))$。脚注第一个字母是k的代表test utterance，脚注第一个字母是j的代表enroll utterance，这里我们共有P个enroll utterance。如果 $k=j$ 那么我们就称这个tuple为positive tuple，否则为negative tuple。\n在训练的时候，我们将所有的utterance都输入到同一个网络得到，embedding：\n\n然后所有的enroll embedding经过平均就可以得到，我们所需要的speaker model :\n\nc_j = E_P[e_{ji}] = \\cfrac{1}{P}\\Sigma^P_{i=1}e_{ji}然后用这个model与test embedding做一个余弦距离就可以做到对test utterance的打分：\n\ns = w · cos(e_{kl}, c_j) + b最后通过一个逻辑回归完成二分类：\n\n将Loss定义为：\n\nL_T(e_{kl}, c_j) = δ(j, k)σ(s) + (1 − δ(j, k))(1 − σ(s))$δ(j, k)= 1$   if​  j=k​ ,否则为0\n\n优点\ntuple loss优化的目标就是我们最后说话人验证的最终目标，是很直接的，所以这样我们就不用去设计中间的像LDA和PLDA这样的细节，所有的中间过程交给模型自己去优化就好了。\n\n缺点\n为了构建这样的tuple，很明显sample的策略异常重要，正负tuple的均衡，不同说话人数据之间的均衡，sample策略的设计好坏将会影响最终的性能。\n\n\nGENERALIZED END-TO-END LOSS这个loss可以说是上面提到的tuple loss的升级版本，也是goole的一篇论文中的提到的。是通过对tuple loss做了一些改进之后的版本。\n我们先把论文中的一个主要流程图呈上来：\n\n\n相对于tuple loss中的tuple sample，在GE2E的一个batch中，我们会采样N个speaker，每个speaker有M个utterance，就如上图中的第二个小图。\n\n然后经过一个神经网络，每个utterance都会得到其对应的embedding。所以会共得到NxM个embedding。每个embedding都是经过L2 norm的。\n\n同样的我们可以求得每个speaker M个utterance对应embedding的center。\n\nc_j = E_M[e_{jm}] = \\cfrac{1}{P}\\Sigma^M_{i=1}e_{jm}\n现在我们有NxM个embedding和N个center。然后这NxM个embedding分别和这N个center做余弦距离，就可以得到一个（NxM）x N 的得分矩阵，也就是上图的第四个子图。彩色的部分代表utterance embedding与同一个说话人center之间的得分，我们会希望这个得分会比同一行中其他得分要高。\n\n所以这个loss就可以用softmax进行定义了，对于上图中的第四个子图的每一行我们都可以将它看为是一个N分类问题的输出（当然论文中还提出了其他的定义方式，我就在这里就不介绍了）。\n\n\n\n优点\n很明显，GE2E的一个batch对于数据的学习就相当于tuple loss中（NxM）x N 个tuple，而且每个speaker的center计算可以被其他speaker利用，也减少了计算。\n\n缺点\n目前还没有特别直观上的缺点，只是自己跑代码的结果没有x-vector的效果好。\n\n\n","dateCreated":"2019-04-27T16:20:29+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-04-27T16:20:29+08:00","description":"在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。","headline":"Loss summary in Speaker recognition","image":["cover.png","cover.png"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/04/27/loss-summary/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/04/27/loss-summary/","keywords":"LOSS","thumbnailUrl":"cover.png"}</script>
+    <meta name="description" content="在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Loss summary in Speaker recognition">
+<meta property="og:url" content="http://czy97.github.io/2019/04/27/loss-summary/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/triplet.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/lstm.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/network.png">
+<meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/ge2e.png">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.979Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Loss summary in Speaker recognition">
+<meta name="twitter:description" content="在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/04/27/loss-summary/triplet.png">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/27/loss-summary/cover.png" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/04/27/loss-summary/cover.png"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/04/27/loss-summary/cover.png" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/04/27/loss-summary/cover.png');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Loss summary in Speaker recognition
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-04-27T16:20:29+08:00">
+	
+		    4月 27, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/Summary/">Summary</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>在自己看的众多说话人识别的论文中，不同的研究者为了达到intra-speaker距离最小化和inter-speaker距离最大化提出了众多的loss。虽然自己也无法记全都有哪些，但在这里先记起来，以后看到新的再做更新。</p>
+<a id="more"></a>
+<h2 id="Softmax-cross-entropy-Loss"><a href="#Softmax-cross-entropy-Loss" class="headerlink" title="Softmax-cross_entropy Loss"></a>Softmax-cross_entropy Loss</h2><p>这个loss的公式和种种就不在这里多说了，作为分类任务的经典loss，softmax是必不可少的。接下来主要分析一下这个loss用于说话人识别end-to-end系统中作为loss的优点和缺点。</p>
+<ul>
+<li><p>优点</p>
+<p>优点的话就是简单，完全不用自己动手去写代码，基本上所有的框架都有现成的函数供使用者使用。</p>
+</li>
+<li><p>缺点</p>
+<ul>
+<li><strong>扩展性不好</strong>。也就是说，如果我有两个说话人，我得搭建一个分类两个说话人的网络，如果有三个说话人，这个时候我就得换另外一个网络。这是很麻烦的一件事。当然可以只换最后一层。</li>
+<li><strong>网络大小随着说话人个数的增加线性增加</strong>。很明显，最后网络的参数数量是会加上最后一层的参数个数乘以分类的说话人个数。有几百个几千个说话人确实都不算什么。但有的数据集就是会有几十万个说话人，只是最后一层的映射估计就要有几百万甚至几千万几亿的参数，这个问题是很大的。但是大的数据集对于模型的好处大家都是知道的，所以这个问题必须得到解决。</li>
+</ul>
+</li>
+</ul>
+<h2 id="Triplet-Loss"><a href="#Triplet-Loss" class="headerlink" title="Triplet Loss"></a>Triplet Loss</h2><p>这个loss最初是在CV的<a href="https://arxiv.org/pdf/1503.03832.pdf" target="_blank" rel="noopener">一篇论文</a>中被提到的，为了计算这个loss，每次训练我们会sample一个三元组$(x^a_i,x^p_i,x^n_i)$ 分别是anchor，positive，和negative样本。positive样本和anchor样本属于同一个类别，而negative样本和anchor样本属于不同的类别。</p>
+<p>首先我们会通过一个网络得到这三个样本的embedding：$(f(x^a_i),f(x^p_i),f(x^n_i))$, 而且我们希望经过训练之后positive样本能够离anchor更近，negative样本会离anchor样本更远。</p>
+<p><img src="/2019/04/27/loss-summary/triplet.png" alt="triplet"></p>
+<p>通过数学的表达是就是positive和anchor的距离在加上一个margin alpha之后小于negative和anchor的距离：</p>
+<script type="math/tex; mode=display">
+||f(x^a_i)-f(x^p_i)||^2_2+\alpha < ||f(x^a_i)-f(x^n_i)||^2_2</script><p>论文将Loss定义为：</p>
+<script type="math/tex; mode=display">
+L = \Sigma ^N_i\left[||f(x^a_i)-f(x^p_i)||^2_2 - ||f(x^a_i)-f(x^n_i)||^2_2+\alpha \right]_+</script><ul>
+<li><p>优点</p>
+<p>同时减小intra class距离和增大inter class距离</p>
+</li>
+<li><p>缺点</p>
+<p>对于采样策略敏感，需要花功夫制定恰当的采样策略</p>
+</li>
+</ul>
+<h2 id="Tuple-Loss"><a href="#Tuple-Loss" class="headerlink" title="Tuple Loss"></a>Tuple Loss</h2><p>Tuple Loss是在谷歌<a href="https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/44681.pdf" target="_blank" rel="noopener">这篇论文</a>中用到的。Tuple loss的提出是为了模拟说话人验证的过程，说话人验证的过程是这样的，我们通过N个enroll的utterance训练一个说话人的模型，然后来了一个test utterance，我们通过训练好的这个模型对test utterance进行打分，然后通过一个得分的阈值来判断这个test和几个enroll的utterance是不是属于同一个说话人。<br>Tuple loss的做法是这样的，对于一次训练样本，我们sample一个tuple: $(x_{jl},(x_{j,i_1},…,x_{j,i_P}))$。脚注第一个字母是k的代表test utterance，脚注第一个字母是j的代表enroll utterance，这里我们共有P个enroll utterance。如果 $k=j$ 那么我们就称这个tuple为positive tuple，否则为negative tuple。</p>
+<p>在训练的时候，我们将所有的utterance都输入到同一个网络得到，embedding：</p>
+<p><img src="/2019/04/27/loss-summary/lstm.png" alt="lstm"></p>
+<p>然后所有的enroll embedding经过平均就可以得到，我们所需要的speaker model :</p>
+<script type="math/tex; mode=display">
+c_j = E_P[e_{ji}] = \cfrac{1}{P}\Sigma^P_{i=1}e_{ji}</script><p>然后用这个model与test embedding做一个余弦距离就可以做到对test utterance的打分：</p>
+<script type="math/tex; mode=display">
+s = w · cos(e_{kl}, c_j) + b</script><p>最后通过一个逻辑回归完成二分类：</p>
+<p><img src="/2019/04/27/loss-summary/network.png" alt="network"></p>
+<p>将Loss定义为：</p>
+<script type="math/tex; mode=display">
+L_T(e_{kl}, c_j) = δ(j, k)σ(s) + (1 − δ(j, k))(1 − σ(s))</script><p>$δ(j, k)= 1$   if​  j=k​ ,否则为0</p>
+<ul>
+<li><p>优点</p>
+<p>tuple loss优化的目标就是我们最后说话人验证的最终目标，是很直接的，所以这样我们就不用去设计中间的像LDA和PLDA这样的细节，所有的中间过程交给模型自己去优化就好了。</p>
+</li>
+<li><p>缺点</p>
+<p>为了构建这样的tuple，很明显<strong>sample的策略</strong>异常重要，正负tuple的均衡，不同说话人数据之间的均衡，sample策略的设计好坏将会影响最终的性能。</p>
+</li>
+</ul>
+<h2 id="GENERALIZED-END-TO-END-LOSS"><a href="#GENERALIZED-END-TO-END-LOSS" class="headerlink" title="GENERALIZED END-TO-END LOSS"></a>GENERALIZED END-TO-END LOSS</h2><p>这个loss可以说是上面提到的tuple loss的升级版本，也是goole的<a href="https://arxiv.org/pdf/1710.10467.pdf" target="_blank" rel="noopener">一篇论文</a>中的提到的。是通过对tuple loss做了一些<strong>改进之后</strong>的版本。</p>
+<p>我们先把论文中的一个主要流程图呈上来：</p>
+<p><img src="/2019/04/27/loss-summary/ge2e.png" alt="ge2e"></p>
+<ol>
+<li><p>相对于tuple loss中的tuple sample，在GE2E的一个batch中，我们会采样N个speaker，每个speaker有M个utterance，就如上图中的第二个小图。</p>
+</li>
+<li><p>然后经过一个神经网络，每个utterance都会得到其对应的embedding。所以会共得到NxM个embedding。每个embedding都是经过L2 norm的。</p>
+</li>
+<li><p>同样的我们可以求得每个speaker M个utterance对应embedding的center。</p>
+<script type="math/tex; mode=display">
+c_j = E_M[e_{jm}] = \cfrac{1}{P}\Sigma^M_{i=1}e_{jm}</script></li>
+<li><p>现在我们有NxM个embedding和N个center。然后这NxM个embedding分别和这N个center做余弦距离，就可以得到一个（NxM）x N 的得分矩阵，也就是上图的第四个子图。彩色的部分代表utterance embedding与同一个说话人center之间的得分，我们会希望这个得分会比同一行中其他得分要高。</p>
+</li>
+<li><p>所以这个loss就可以用<strong>softmax</strong>进行定义了，对于上图中的第四个子图的每一行我们都可以将它看为是一个N分类问题的输出（当然论文中还提出了其他的定义方式，我就在这里就不介绍了）。</p>
+</li>
+</ol>
+<ul>
+<li><p>优点</p>
+<p>很明显，GE2E的一个batch对于数据的学习就相当于tuple loss中（NxM）x N 个tuple，而且每个speaker的center计算可以被其他speaker利用，也减少了计算。</p>
+</li>
+<li><p>缺点</p>
+<p>目前还没有特别直观上的缺点，只是自己跑代码的结果没有x-vector的效果好。</p>
+</li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/LOSS/">LOSS</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/28/pytorch-dataloader/" data-tooltip="Pytorch Dataloader 学习笔记" aria-label="PREVIOUS: Pytorch Dataloader 学习笔记">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/19/python-multi/" data-tooltip="Python 多线程与多进程" aria-label="NEXT: Python 多线程与多进程">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/28/pytorch-dataloader/" data-tooltip="Pytorch Dataloader 学习笔记" aria-label="PREVIOUS: Pytorch Dataloader 学习笔记">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/04/19/python-multi/" data-tooltip="Python 多线程与多进程" aria-label="NEXT: Python 多线程与多进程">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/27/loss-summary/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/04/27/loss-summary/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/04/27/loss-summary/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/04/27/loss-summary/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

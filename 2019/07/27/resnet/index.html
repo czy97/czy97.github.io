@@ -1,0 +1,534 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Resnet原始论文阅读笔记 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。\n\nResnet的motivation​        这篇论文的全称是Deep Residual Learning for Image Recognition，中文翻译就是深度残差学习。之前自己道听途说了解过resnet，但没有看过原始论文。在自己最初的认识中，以为这个论文的motivation是为了解决深度神经网络的梯度消失，看了论文之后才发现这个idea不是这么出来的。\n​       在之前的很多研究中已经发现，简单的加深网络，并不一定会对实验最后的结果有什么帮助，而且深到一定程度反而会使得模型变差，而且这并不是由于过拟合造成的。\n​       作者认为存在一种构造更加深的神经网络的策略，首先我们有一个浅层的神经网络，然后在这个浅层神经网络的基础上加一些层，就可以构造更深的网络。而且限定这些多加的层的功能，让这些层只具有copy前一层的作用，那么构造的更深的网络的性能就不会比原始的浅层网络差。但实验发现，我们现在的技术还无法做到去优化这个更深的网络，使得更深的网络的性能比前面的构造策略产生的网络还要好。\n​       作者的想法是，如果一个比较理想的特征mapping是$H(x)$，但又担心这个mapping无法做到copy的目的，作者直接将$H(x)$拆成了两部分，$H(x) = F(x) + x$. 网络的参数用于拟合$F(x)$，被称为是residual部分，然后一个shortcut的连接直接实现x的copy，如下图。\n\n​         如果copy的做法是最优的，那么就让residual部分输出零就可以了。而且从理论上讲，让residual输出零也要比拟合一个copy功能的mapping更加的容易。\nResnet结构对于shortcut $x$ 的一些处理​       因为$H(x)=F(x)+x$ ，所以$F(x)$要和$x$有着同样的维度，但由于网络结构的问题，同样的维度并不一定能够保证。面对$F(x)$和$x$维度不一致的情况，一般有三种解决方案：\n\n将方程改为，$H(x)=F(x)+Wx$ ，对x做一个矩阵映射，将x的维度映射为与$F(x)$一致。\n假如只是dimension增加了，比如，在进行CNN的时候，channel的个数增加了，可用zero-padding去补多余的dimension\n假如只是dimension增加了，可以用$H(x)=F(x)+Wx$去的到多余的dimension，与$x$一致的dimension仍然用copy\n\nResnet block的一些形式在论文中，作者提出了两种小的resnet block，用这些小的block可以堆叠形成最终的resnet。这两种block分别是下图左边和右边的图示。\n\n​          3x3的卷积核可以通过padding=1，stride=1的设置从而实现映射之后维度不发生变化。需要注意的细节是，relu在求和之后。\n一些论文中有用的结论\n单纯的加深网络并不一定能获得更好的模型性能，而且这种性能的下降并不是由于过拟合造成的。\n在作者的工作之前，就有人做过gating（对于x会加一个权重，这个权重和输入有关）的highway模型，但这种模型在网络变身的时候表现得并不是很好。\nresnet的block应该有两到三层，实验证明，一层，并没有什么用，更深的话也可以。\n作者发现，更加深的网络使用的BN之后可以解决梯度消失的问题，但是即使这样，更深网路的性能也会变差。\n而且当层数比较少的时候，虽然residule不能带来准确率上的提升，但是在模型训练的初始阶段，resudual网络收敛也更快。\n\n","dateCreated":"2019-07-27T18:37:28+08:00","dateModified":"2019-10-26T15:48:10+08:00","datePublished":"2019-07-27T18:37:28+08:00","description":"Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。","headline":"Resnet原始论文阅读笔记","image":["cover.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/07/27/resnet/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/07/27/resnet/","keywords":"RESNET","thumbnailUrl":"cover.jpg"}</script>
+    <meta name="description" content="Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Resnet原始论文阅读笔记">
+<meta property="og:url" content="http://czy97.github.io/2019/07/27/resnet/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:image" content="http://czy97.github.io/2019/07/27/resnet/struct.jpeg">
+<meta property="og:image" content="http://czy97.github.io/2019/07/27/resnet/block.jpeg">
+<meta property="og:updated_time" content="2019-10-26T07:48:10.021Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Resnet原始论文阅读笔记">
+<meta name="twitter:description" content="Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。">
+<meta name="twitter:image" content="http://czy97.github.io/2019/07/27/resnet/struct.jpeg">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/07/27/resnet/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/07/27/resnet/cover.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/07/27/resnet/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/07/27/resnet/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/07/27/resnet/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Resnet原始论文阅读笔记
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-07-27T18:37:28+08:00">
+	
+		    7月 27, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/paperReading/">paperReading</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>Resnet可以说是深度学习跨时代之作，也是何凯明巨神被cited最多的一篇论文，今日才得以膜拜，惭愧惭愧。</p>
+<a id="more"></a>
+<h3 id="Resnet的motivation"><a href="#Resnet的motivation" class="headerlink" title="Resnet的motivation"></a>Resnet的motivation</h3><p>​        这篇论文的全称是<a href="https://arxiv.org/pdf/1512.03385.pdf" target="_blank" rel="noopener">Deep Residual Learning for Image Recognition</a>，中文翻译就是深度残差学习。之前自己道听途说了解过resnet，但没有看过原始论文。在自己最初的认识中，以为这个论文的motivation是为了解决深度神经网络的梯度消失，看了论文之后才发现这个idea不是这么出来的。</p>
+<p>​       在之前的很多研究中已经发现，简单的<strong>加深网络</strong>，并不一定会对实验最后的结果有什么帮助，而且深到一定程度反而会使得模型变差，而且这<strong>并不是</strong>由于<strong>过拟合</strong>造成的。</p>
+<p>​       作者认为存在一种构造更加深的神经网络的策略，首先我们有一个浅层的神经网络，然后在这个浅层神经网络的基础上加一些层，就可以构造更深的网络。而且<strong>限定</strong>这些多加的层的<strong>功能</strong>，让这些层只具有copy前一层的作用，那么构造的更深的网络的性能就不会比原始的浅层网络差。但实验发现，我们现在的技术还无法做到去优化这个更深的网络，使得更深的网络的性能比前面的构造策略产生的网络还要好。</p>
+<p>​       作者的想法是，如果一个比较理想的特征mapping是$H(x)$，但又担心这个mapping无法做到copy的目的，作者直接将$H(x)$拆成了两部分，$H(x) = F(x) + x$. 网络的参数用于拟合$F(x)$，被称为是residual部分，然后一个<strong>shortcut</strong>的连接直接实现x的copy，如下图。</p>
+<p><img src="/2019/07/27/resnet/struct.jpeg" alt="struct"></p>
+<p>​         如果copy的做法是最优的，那么就让residual部分输出零就可以了。而且从理论上讲，让<strong>residual输出零也要比拟合一个copy功能的mapping更加的容易</strong>。</p>
+<h3 id="Resnet结构"><a href="#Resnet结构" class="headerlink" title="Resnet结构"></a>Resnet结构</h3><h4 id="对于shortcut-x-的一些处理"><a href="#对于shortcut-x-的一些处理" class="headerlink" title="对于shortcut $x$ 的一些处理"></a>对于shortcut $x$ 的一些处理</h4><p>​       因为$H(x)=F(x)+x$ ，所以$F(x)$要和$x$有着同样的维度，但由于网络结构的问题，同样的维度并不一定能够保证。面对$F(x)$和$x$维度不一致的情况，一般有三种解决方案：</p>
+<ul>
+<li>将方程改为，$H(x)=F(x)+Wx$ ，对x做一个矩阵映射，将x的维度映射为与$F(x)$一致。</li>
+<li>假如只是dimension增加了，比如，在进行CNN的时候，channel的个数增加了，可用zero-padding去补多余的dimension</li>
+<li>假如只是dimension增加了，可以用$H(x)=F(x)+Wx$去的到多余的dimension，与$x$一致的dimension仍然用copy</li>
+</ul>
+<h4 id="Resnet-block的一些形式"><a href="#Resnet-block的一些形式" class="headerlink" title="Resnet block的一些形式"></a>Resnet block的一些形式</h4><p>在论文中，作者提出了两种小的resnet block，用这些小的block可以堆叠形成最终的resnet。这两种block分别是下图左边和右边的图示。</p>
+<p><img src="/2019/07/27/resnet/block.jpeg" alt="block"></p>
+<p>​          3x3的卷积核可以通过padding=1，stride=1的设置从而实现映射之后维度不发生变化。需要注意的细节是，<strong>relu在求和之后</strong>。</p>
+<h3 id="一些论文中有用的结论"><a href="#一些论文中有用的结论" class="headerlink" title="一些论文中有用的结论"></a>一些论文中有用的结论</h3><ul>
+<li>单纯的加深网络并不一定能获得更好的模型性能，而且这种性能的下降并不是由于过拟合造成的。</li>
+<li>在作者的工作之前，就有人做过gating（对于x会加一个权重，这个权重和输入有关）的highway模型，但这种模型在网络变身的时候表现得并不是很好。</li>
+<li>resnet的block应该有两到三层，实验证明，一层，并没有什么用，更深的话也可以。</li>
+<li>作者发现，更加深的网络使用的BN之后可以解决梯度消失的问题，但是即使这样，更深网路的性能也会变差。</li>
+<li>而且当层数比较少的时候，虽然residule不能带来准确率上的提升，但是在模型训练的初始阶段，resudual网络收敛也更快。</li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/RESNET/">RESNET</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/08/05/pytorch-tensor/" data-tooltip="Pytorch Tensor Summary" aria-label="PREVIOUS: Pytorch Tensor Summary">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/20/python-val/" data-tooltip="python中的可变对象与不可变对象" aria-label="NEXT: python中的可变对象与不可变对象">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/27/resnet/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/27/resnet/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/27/resnet/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/08/05/pytorch-tensor/" data-tooltip="Pytorch Tensor Summary" aria-label="PREVIOUS: Pytorch Tensor Summary">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/20/python-val/" data-tooltip="python中的可变对象与不可变对象" aria-label="NEXT: python中的可变对象与不可变对象">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/27/resnet/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/27/resnet/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/27/resnet/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/27/resnet/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/27/resnet/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/27/resnet/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>

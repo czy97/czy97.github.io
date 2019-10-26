@@ -1,0 +1,525 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Kaldi学习笔记 - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。\n\ncompute-vad要弄清这个计算vad的命令，要搞懂两点。\n\ncompute-vad是怎么计算的（参考ComputeVadEnergy()）\ncompute-vad接受的是一个FxN的特征，F是frame的个数，N是特征的维度。对于每一帧，compute-vad会有一个输出，0或者是1。1代表这一帧是语音帧，0代表这一帧是非语音帧。在计算输出的时候，compute-vad只会读取每一帧特征的第一个参数（认为这个参数是log能量或者是类似的值），然后将这个参数与阈值进行比较（5.0 + 0.5 * (average log-energy in this file)），大于阈值则表示语音帧，小于阈值则表示非语音帧。（compute-vad还可以设置计算的context，只有context中一定比例的帧大于阈值才认为当前帧是语音帧）。\n\ncompute-vad的输入是什么\n由上面的计算过程知道，compute-vad只会读取每一帧特征的第一个值，并认为这是某种能量。也就是说只要我们输入的特征的第一个值可以表示某种能量就可以了。\n\n如果我们使用的是mfcc特征，compute-mfcc有一个use-energy的参数，这个参数默认为true。如果这个参数为true，那么energy（这个energy究竟是什么energy还不知道，但感觉应该是wav或者是FFT变换之后的ener）就会替换掉mfcc的C0参数，也就是mfcc的第一个参数。这样mfcc特征的第一维就是energy了，就可以用了。\nplp特征与mfcc特征同理\n如果我们使用的是fbank特征，compute-fbank也有一个use-energy参数，这个参数默认为false。如果将这个参数设为了true，那么就会在fbank原有的维度上加一维energy特征（如果fbank计算和mfcc配置一样的话，compute-mfcc的第一维和compute-fbank的第一维将会完全一致），加在第一维，这样fbank也可以用于vad计算。\n\n\n\napply-cmvn-sliding当时只是好奇,当—center=true的时候，是怎么进行padding的。官方文档说，当这个参数为true的时候，use a window centered on the current frame。然后我就想如果current frame就是开头，是不是需要在左边进行padding啊，实验之后发现根本就没有padding。什么意思呢？\n如果，一个frame左边的frame没有达到窗长的一般，那么窗就会右移直至窗的最左边与第一帧对齐。最右边的帧同理。而且如果window的长度大于整个帧的个数的话，算法会赋值window_len=帧数\n","dateCreated":"2019-07-13T18:48:06+08:00","dateModified":"2019-10-26T15:48:09+08:00","datePublished":"2019-07-13T18:48:06+08:00","description":"在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。","headline":"Kaldi学习笔记","image":["cover.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/07/13/kaldiNote/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/07/13/kaldiNote/","keywords":"KALDI","thumbnailUrl":"cover.jpg"}</script>
+    <meta name="description" content="在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Kaldi学习笔记">
+<meta property="og:url" content="http://czy97.github.io/2019/07/13/kaldiNote/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-10-26T07:48:09.976Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Kaldi学习笔记">
+<meta name="twitter:description" content="在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/07/13/kaldiNote/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/07/13/kaldiNote/cover.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/07/13/kaldiNote/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/07/13/kaldiNote/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/07/13/kaldiNote/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Kaldi学习笔记
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-07-13T18:48:06+08:00">
+	
+		    7月 13, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>在本文中，讲记录一些自己在使用kaldi时对kaldi的理解和kaldi的一些常用的数据处理方式。</p>
+<a id="more"></a>
+<h3 id="compute-vad"><a href="#compute-vad" class="headerlink" title="compute-vad"></a>compute-vad</h3><p>要弄清这个计算vad的命令，要搞懂两点。</p>
+<ul>
+<li><p>compute-vad是怎么计算的（参考<a href="http://kaldi-asr.org/doc/namespacekaldi.html#a451c729dd12ccb0707dd53c9768e572d" target="_blank" rel="noopener">ComputeVadEnergy()</a>）</p>
+<p>compute-vad接受的是一个FxN的特征，F是frame的个数，N是特征的维度。对于每一帧，compute-vad会有一个输出，0或者是1。1代表这一帧是语音帧，0代表这一帧是非语音帧。在计算输出的时候，compute-vad只会读取每一帧特征的<strong>第一个参数</strong>（认为这个参数是log能量或者是类似的值），然后将这个参数与阈值进行比较（5.0 + 0.5 * (average log-energy in this file)），大于阈值则表示语音帧，小于阈值则表示非语音帧。（compute-vad还可以设置计算的context，只有context中一定比例的帧大于阈值才认为当前帧是语音帧）。</p>
+</li>
+<li><p>compute-vad的<strong>输入</strong>是什么</p>
+<p>由上面的计算过程知道，compute-vad只会读取每一帧特征的第一个值，并认为这是<strong>某种能量</strong>。也就是说只要我们输入的特征的第一个值可以表示某种能量就可以了。</p>
+<ol>
+<li>如果我们使用的是mfcc特征，compute-mfcc有一个use-energy的参数，这个参数默认为true。如果这个参数为true，那么energy（这个energy究竟是什么energy还不知道，但感觉应该是wav或者是FFT变换之后的ener）就会替换掉mfcc的C0参数，也就是mfcc的第一个参数。这样mfcc特征的第一维就是energy了，就可以用了。</li>
+<li>plp特征与mfcc特征同理</li>
+<li>如果我们使用的是fbank特征，compute-fbank也有一个use-energy参数，这个参数默认为false。如果将这个参数设为了true，那么就会在fbank原有的维度上<strong>加一维</strong>energy特征（如果fbank计算和mfcc配置一样的话，compute-mfcc的第一维和compute-fbank的第一维将会完全一致），加在第一维，这样fbank也可以用于vad计算。</li>
+</ol>
+</li>
+</ul>
+<h3 id="apply-cmvn-sliding"><a href="#apply-cmvn-sliding" class="headerlink" title="apply-cmvn-sliding"></a>apply-cmvn-sliding</h3><p>当时只是好奇,当<strong>—center=true</strong>的时候，是怎么进行padding的。官方文档说，当这个参数为true的时候，use a window centered on the current frame。然后我就想如果current frame就是开头，是不是需要在左边进行padding啊，实验之后发现根本就没有padding。什么意思呢？</p>
+<p>如果，一个frame左边的frame没有达到窗长的一般，那么窗就会右移直至窗的最左边与第一帧对齐。最右边的帧同理。而且如果window的长度大于整个帧的个数的话，算法会赋值window_len=帧数</p>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/KALDI/">KALDI</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/20/python-val/" data-tooltip="python中的可变对象与不可变对象" aria-label="PREVIOUS: python中的可变对象与不可变对象">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/12/hexoDebug/" data-tooltip="hexoDebug记录" aria-label="NEXT: hexoDebug记录">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/20/python-val/" data-tooltip="python中的可变对象与不可变对象" aria-label="PREVIOUS: python中的可变对象与不可变对象">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/07/12/hexoDebug/" data-tooltip="hexoDebug记录" aria-label="NEXT: hexoDebug记录">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/13/kaldiNote/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/07/13/kaldiNote/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/07/13/kaldiNote/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/07/13/kaldiNote/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>
