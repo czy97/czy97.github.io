@@ -1,0 +1,513 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN,en,default">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="generator" content="Zhengyang Chen&#39;s blog">
+    <title>Some tricks in SRE - Zhengyang Chen&#39;s blog</title>
+    <meta name="author" content="Zhengyang Chen">
+    
+        <meta name="keywords" content="hexo,javascript,javascript,hexo">
+    
+    
+        <link rel="icon" href="http://czy97.github.io/assets/images/kelasong.jpeg">
+    
+    
+    <script type="application/ld+json">{"@context":"http://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg"},"articleBody":"在这片文章中，我将记录一些在说话人验证任务中有用的trick。\n\n\nEmbedding Regularization\n这个方法是我在论文DEEP SPEAKER EMBEDDING LEARNING WITH MULTI-LEVEL POOLING FOR TEXT-INDEPENDENT SPEAKER VERIFICATION中看到的，在xvector提取embedding的时候(有LDA和PLDA的backend)，除了说话人的loss之外，对embedding加一个regularization，让它的值的范围比较小，对于最后的性能会有改善。这个结论我自己还没验证，验证之后我将把这句话删了。\n\n\\mathcal{L}=-\\sum_{i=1}^{M} \\log \\frac{\\exp ^{w_{c_{i}}^{T} x_{i}+b_{c_{i}}}}{\\sum_{j}^{N} \\exp ^{w_{j}^{T} x_{i}+b_{j}}}+\\lambda\\left\\|z_{i}\\right\\|_{2} \\label{regularize}\\tag{1}\n\n","dateCreated":"2019-10-31T21:49:39+08:00","dateModified":"2019-10-31T22:00:08+08:00","datePublished":"2019-10-31T21:49:39+08:00","description":"在这片文章中，我将记录一些在说话人验证任务中有用的trick。","headline":"Some tricks in SRE","image":["cover.jpg","cover.jpg"],"mainEntityOfPage":{"@type":"WebPage","@id":"http://czy97.github.io/2019/10/31/sre-tricks/"},"publisher":{"@type":"Organization","name":"Zhengyang Chen","sameAs":["https://github.com/"],"image":"kelasong.jpeg","logo":{"@type":"ImageObject","url":"kelasong.jpeg"}},"url":"http://czy97.github.io/2019/10/31/sre-tricks/","keywords":"SRE","thumbnailUrl":"cover.jpg"}</script>
+    <meta name="description" content="在这片文章中，我将记录一些在说话人验证任务中有用的trick。">
+<meta name="keywords" content="javascript,hexo">
+<meta property="og:type" content="blog">
+<meta property="og:title" content="Some tricks in SRE">
+<meta property="og:url" content="http://czy97.github.io/2019/10/31/sre-tricks/index.html">
+<meta property="og:site_name" content="Zhengyang Chen&#39;s blog">
+<meta property="og:description" content="在这片文章中，我将记录一些在说话人验证任务中有用的trick。">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-10-31T14:00:08.917Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Some tricks in SRE">
+<meta name="twitter:description" content="在这片文章中，我将记录一些在说话人验证任务中有用的trick。">
+    
+    
+        
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/assets/images/kelasong.jpeg"/>
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/10/31/sre-tricks/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/10/31/sre-tricks/cover.jpg" />
+    
+    
+        <meta property="og:image" content="http://czy97.github.io/2019/10/31/sre-tricks/cover.jpg"/>
+        <meta class="swiftype" name="image" data-type="enum" content="http://czy97.github.io/2019/10/31/sre-tricks/cover.jpg" />
+    
+    
+    <!--STYLES-->
+    <link rel="stylesheet" href="/assets/css/style-kpnqlflosyl4vwoz7sl207xaiamkqlxu50xxxjqplreb5zzvr9di4ar5sfvh.min.css">
+    <!--STYLES END-->
+    
+
+    
+</head>
+
+    <body>
+        <div id="blog">
+            <!-- Define author's picture -->
+
+
+    
+        
+            
+        
+    
+
+<header id="header" data-behavior="4">
+    <i id="btn-open-sidebar" class="fa fa-lg fa-bars"></i>
+    <div class="header-title">
+        <a class="header-title-link" href="/ ">Zhengyang Chen&#39;s blog</a>
+    </div>
+    
+        
+            <a  class="header-right-picture "
+                href="#about">
+        
+        
+            <img class="header-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+        </a>
+    
+</header>
+
+            <!-- Define author's picture -->
+
+
+
+        
+    
+
+<nav id="sidebar" data-behavior="4">
+    <div class="sidebar-container">
+        
+            <div class="sidebar-profile">
+                <a href="/#about">
+                    <img class="sidebar-profile-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+                </a>
+                <h4 class="sidebar-profile-name">Zhengyang Chen</h4>
+                
+                    <h5 class="sidebar-profile-bio"><p>No hurry</p>
+</h5>
+                
+            </div>
+        
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/ "
+                            
+                            title="Home"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-home" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Home</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-categories"
+                            
+                            title="Categories"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-bookmark" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Categories</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-tags"
+                            
+                            title="Tags"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-tags" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Tags</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="/all-archives"
+                            
+                            title="Archives"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-archive" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">Archives</span>
+                    </a>
+            </li>
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link "
+                             href="#about"
+                            
+                            title="About"
+                        >
+                    
+                        <i class="sidebar-button-icon fa fa-question" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">About</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+            <ul class="sidebar-buttons">
+            
+                <li class="sidebar-button">
+                    
+                        <a  class="sidebar-button-link " href="https://github.com/" target="_blank" rel="noopener" title="GitHub">
+                    
+                        <i class="sidebar-button-icon fab fa-github" aria-hidden="true"></i>
+                        <span class="sidebar-button-desc">GitHub</span>
+                    </a>
+            </li>
+            
+        </ul>
+        
+    </div>
+</nav>
+
+            
+        <div class="post-header-cover
+                    text-center
+                    post-header-cover--full"
+             style="background-image:url('/2019/10/31/sre-tricks/cover.jpg');"
+             data-behavior="4">
+            
+                <div class="post-header main-content-wrap text-center">
+    
+        <h1 class="post-title">
+            Some tricks in SRE
+        </h1>
+    
+    
+        <div class="post-meta">
+    <time datetime="2019-10-31T21:49:39+08:00">
+	
+		    10月 31, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/Summary/">Summary</a>
+
+
+    
+</div>
+
+    
+</div>
+
+            
+        </div>
+
+            <div id="main" data-behavior="4"
+                 class="hasCover
+                        hasCoverMetaIn
+                        ">
+                
+<article class="post">
+    
+    
+    <div class="post-content markdown">
+        <div class="main-content-wrap">
+            <p>在这片文章中，我将记录一些在说话人验证任务中有用的trick。</p>
+<a id="more"></a>
+<ul>
+<li><p>Embedding Regularization</p>
+<p>这个方法是我在论文DEEP SPEAKER EMBEDDING LEARNING WITH MULTI-LEVEL POOLING FOR TEXT-INDEPENDENT SPEAKER VERIFICATION中看到的，在xvector提取embedding的时候(有LDA和PLDA的backend)，除了说话人的loss之外，对embedding加一个regularization，让它的值的范围比较小，对于最后的性能会有改善。<strong>这个结论我自己还没验证，验证之后我将把这句话删了</strong>。</p>
+<script type="math/tex; mode=display">
+\mathcal{L}=-\sum_{i=1}^{M} \log \frac{\exp ^{w_{c_{i}}^{T} x_{i}+b_{c_{i}}}}{\sum_{j}^{N} \exp ^{w_{j}^{T} x_{i}+b_{j}}}+\lambda\left\|z_{i}\right\|_{2} \label{regularize}\tag{1}</script></li>
+</ul>
+
+            
+
+        </div>
+    </div>
+    <div id="post-footer" class="post-footer main-content-wrap">
+        
+            <div class="post-footer-tags">
+                <span class="text-color-light text-small">TAGGED IN</span><br/>
+                
+    <a class="tag tag--primary tag--small t-link" href="/tags/SRE/">SRE</a>
+
+            </div>
+        
+        
+            <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/10/26/ICASSP2019/" data-tooltip="ICASSP2019 Paper Reading" aria-label="NEXT: ICASSP2019 Paper Reading">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+        
+        
+            
+        
+    </div>
+</article>
+
+
+
+                <footer id="footer" class="main-content-wrap">
+    <span class="copyrights">
+        Copyrights &copy; 2019 Zhengyang Chen. All Rights Reserved.
+    </span>
+</footer>
+
+            </div>
+            
+                <div id="bottom-bar" class="post-bottom-bar" data-behavior="4">
+                    <div class="post-actions-wrap">
+    <nav>
+        <ul class="post-actions post-action-nav">
+            <li class="post-action">
+                
+                    <a class="post-action-btn btn btn--disabled">
+                
+                    <i class="fa fa-angle-left" aria-hidden="true"></i>
+                    <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
+                </a>
+            </li>
+            <li class="post-action">
+                
+                    
+                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/10/26/ICASSP2019/" data-tooltip="ICASSP2019 Paper Reading" aria-label="NEXT: ICASSP2019 Paper Reading">
+                
+                    <span class="hide-xs hide-sm text-small icon-mr">NEXT</span>
+                    <i class="fa fa-angle-right" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
+    <ul class="post-actions post-action-share">
+        <li class="post-action hide-lg hide-md hide-sm">
+            <a class="post-action-btn btn btn--default btn-open-shareoptions" href="#btn-open-shareoptions" aria-label="Share this post">
+                <i class="fa fa-share-alt" aria-hidden="true"></i>
+            </a>
+        </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Facebook">
+                    <i class="fab fa-facebook" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Twitter">
+                    <i class="fab fa-twitter" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+            
+            
+            <li class="post-action hide-xs">
+                <a class="post-action-btn btn btn--default" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/10/31/sre-tricks/" title="Share on Google+">
+                    <i class="fab fa-google-plus" aria-hidden="true"></i>
+                </a>
+            </li>
+        
+        
+            
+        
+        <li class="post-action">
+            
+                <a class="post-action-btn btn btn--default" href="#" aria-label="Back to top">
+            
+                <i class="fa fa-list" aria-hidden="true"></i>
+            </a>
+        </li>
+    </ul>
+</div>
+
+
+                </div>
+                
+    <div id="share-options-bar" class="share-options-bar" data-behavior="4">
+        <i id="btn-close-shareoptions" class="fa fa-times"></i>
+        <ul class="share-options">
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://www.facebook.com/sharer/sharer.php?u=http://czy97.github.io/2019/10/31/sre-tricks/">
+                        <i class="fab fa-facebook" aria-hidden="true"></i><span>Share on Facebook</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://twitter.com/intent/tweet?text=http://czy97.github.io/2019/10/31/sre-tricks/">
+                        <i class="fab fa-twitter" aria-hidden="true"></i><span>Share on Twitter</span>
+                    </a>
+                </li>
+            
+                
+                
+                <li class="share-option">
+                    <a class="share-option-btn" target="new" href="https://plus.google.com/share?url=http://czy97.github.io/2019/10/31/sre-tricks/">
+                        <i class="fab fa-google-plus" aria-hidden="true"></i><span>Share on Google+</span>
+                    </a>
+                </li>
+            
+        </ul>
+    </div>
+
+
+            
+        </div>
+        
+
+
+    
+        
+    
+
+<div id="about">
+    <div id="about-card">
+        <div id="about-btn-close">
+            <i class="fa fa-times"></i>
+        </div>
+        
+            <img id="about-card-picture" src="/assets/images/kelasong.jpeg" alt="Author&#39;s picture"/>
+        
+            <h4 id="about-card-name">Zhengyang Chen</h4>
+        
+            <div id="about-card-bio"><p>No hurry</p>
+</div>
+        
+        
+            <div id="about-card-job">
+                <i class="fa fa-briefcase"></i>
+                <br/>
+                <p>author.job</p>
+
+            </div>
+        
+        
+            <div id="about-card-location">
+                <i class="fa fa-map-marker-alt"></i>
+                <br/>
+                Wu Han
+            </div>
+        
+    </div>
+</div>
+
+        
+        
+<div id="cover" style="background-image:url('/assets/images/cover.jpg');"></div>
+        <!--SCRIPTS-->
+<script src="/assets/js/script-1ssvxe9dejcm6dunmp9pwayfycay4apoppihhwx9lkyakwa6g5wjrerljwvl.min.js"></script>
+<!--SCRIPTS END-->
+
+    
+
+
+
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ["$","$"], ["\\(","\\)"] ],
+            skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+            processEscapes: true
+        }
+    });
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax();
+        for (var i = 0; i < all.length; ++i)
+            all[i].SourceElement().parentNode.className += ' has-jax';
+    });
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML"></script>
+
+
+</body>
+</html>
