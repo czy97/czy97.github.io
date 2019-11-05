@@ -186,6 +186,98 @@
     <section class="postShorten-group main-content-wrap">
     
     
+    <article class="postShorten postShorten--thumbnailimg-bottom">
+        <div class="postShorten-wrap">
+            
+            <div class="postShorten-header">
+                <h1 class="postShorten-title">
+                    
+                        <a class="link-unstyled" href="/2019/11/05/https-http/">
+                            HTTPS VS HTTP
+                        </a>
+                    
+                </h1>
+                <div class="postShorten-meta">
+    <time datetime="2019-11-05T11:52:07+08:00">
+	
+		    11月 05, 2019
+    	
+    </time>
+    
+        <span>in </span>
+        
+    <a class="category-link" href="/categories/learningNote/">learningNote</a>
+
+
+    
+</div>
+
+            </div>
+            
+                <div class="postShorten-content">
+                    <a id="more"></a>
+<p>我也忘了自己怎么就去了解这些东西了，既然已经了解了，就记下来吧。</p>
+<!-- more -->
+<h1 id="table-of-contents">Table of Contents</h1><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#一些基本概念和加密方式"><span class="toc-text">一些基本概念和加密方式</span></a></li></ol>
+<p>在讨论HTTPS和HTTP之前，我们先谈论一些概念： 明文、密文、密钥、对称加密、非对称加密、摘要、数字签名、数字证书 。当然谈论玩这些概念之后，HTTPS和HTTP的区别自然就出来了。</p>
+<p>任何事物的发展都是循序渐进的过程，加密算法也是如此，由简单的加密算法到复杂加密算法是在加密算法研究解密研究不断地博弈中逐渐演进的。本文也将从简到难进行介绍。</p>
+<h2 id="一些基本概念和加密方式"><a href="#一些基本概念和加密方式" class="headerlink" title="一些基本概念和加密方式"></a>一些基本概念和加密方式</h2><ul>
+<li><p>明文：没有加密的原始数据</p>
+</li>
+<li><p>密文：加密之后的数据</p>
+</li>
+<li><p>秘钥：用于加密或者解密的钥匙，在这个场景中，秘钥是使用加密算法进行加密或解密的时候需要输入的<strong>参数</strong>。</p>
+</li>
+<li><p>对称加密：对称加密对应对称秘钥，也就是说在加密和解密的时候使用的是同一个参数。</p>
+</li>
+<li><p>非对称加密：分对称加密对应于两个秘钥，分别成为<strong>公钥</strong>和<strong>私钥</strong>。私钥顾名思义是私有的钥匙，是有发布方持有的，别人看不到的。公钥是发布方发布可以供任何人使用的钥匙。</p>
+<p>使用方式有两种：</p>
+<ol>
+<li>用私钥加密，然后用公钥解密</li>
+<li>用公钥加密，然后用私钥解密</li>
+</ol>
+</li>
+<li><p>数字签名</p>
+<p>签名，顾名思义是为了证明一个人的身份所做的事。比如服务器A发了一个数据给你，你怎么知道这个数据就是服务器A发给你的呢，而且这个这个数据在传输的过程中有没有被篡改过呢？那就需要验证服务器A的签名。以下是验证的步骤：</p>
+<ol>
+<li>首先<strong>服务端</strong>会先把报文经过Hash处理转为Digest，然后使用<strong>私钥</strong>对这个Digest进行加密生成签名</li>
+<li>报文和签名会一同发给客户端</li>
+<li>在<strong>客户端</strong>，首先会使用<strong>公钥</strong>对签名进行解密，如果解密成功（生成Digest2），说明公钥和私钥是配对的，也就是说发送端就是客户端所期望的服务端。</li>
+<li>然后客户端对收到的报文进行同样的Hash处理生成Digest1，如果Digest1和Digest2完全一致，则说明报文在传输过程中没有被更改过。</li>
+</ol>
+<p><img src="https-http/signature.jpg" alt="signature"></p>
+</li>
+<li><p>数字证书（CA, Certificate Authority )</p>
+<p>​        为什么有了签名还需要CA，现在来解释一下。虽然客户端可以通过公钥来验证服务端签名的正确性，但是客户端该怎么保证公钥的正确性呢？比如现在客户端想从服务端A获取一个消息，但是有个攻击者A’冒充A对客户端说我就是A，并把产生的公钥给了客户端。这个时候客户端拿到了A’的公钥，但是客户端认为这个公钥是A的，所以当攻击者A’向客户端发了消息之后，客户端通过公钥验证了签名，便信以为真地认为是A给它发了信息，但其实信息是A’发的。所以说仅仅有数字签名还是有问题的。</p>
+<p>​        所以说为了保证签名验证的正确性，就现需要保证公钥的正确性，而数字证书就是实现公钥正确性的手段。数字证书简称CA，它由<strong>权威机构</strong>给某网站颁发的一种认可凭证，这个凭证是被大家（浏览器）所认可的 。数字证书一般由数字证书认证机构发布，证书里面包含了真实服务器的公钥和网站的其他一些信息，数字证书机构用自己的私钥加密之后发给浏览器，浏览器用数字证书机构的公钥解密之后得到真实服务器的公钥。因为颁布证书的机构是一种权威的机构，是<strong>大家都认可</strong>的，因此是可信的。</p>
+</li>
+</ul>
+
+                    
+                        
+
+                    
+                    
+                        <p>
+                            <a href="/2019/11/05/https-http/#post-footer" class="postShorten-excerpt_link link">
+                                Comment and share
+                            </a>
+                        </p>
+                    
+                </div>
+            
+        </div>
+        
+            <a href="/2019/11/05/https-http/">
+                <div class="postShorten-thumbnailimg">
+                    <img alt="" src="http://czy97.github.io/2019/11/05/https-http/cover.png"/>
+                </div>
+            </a>
+            
+        
+    </article>
+    
+    
     <article class="postShorten postShorten--thumbnailimg-left">
         <div class="postShorten-wrap">
             
@@ -629,56 +721,6 @@
             <a href="/2019/07/12/hexoDebug/">
                 <div class="postShorten-thumbnailimg">
                     <img alt="" src="http://czy97.github.io/2019/07/12/hexoDebug/cover.jpg"/>
-                </div>
-            </a>
-            
-        
-    </article>
-    
-    
-    <article class="postShorten postShorten--thumbnailimg-left">
-        <div class="postShorten-wrap">
-            
-            <div class="postShorten-header">
-                <h1 class="postShorten-title">
-                    
-                        <a class="link-unstyled" href="/2019/06/26/gan/">
-                            Generative Adversarial Networks学习笔记
-                        </a>
-                    
-                </h1>
-                <div class="postShorten-meta">
-    <time datetime="2019-06-26T09:26:21+08:00">
-	
-		    6月 26, 2019
-    	
-    </time>
-    
-        <span>in </span>
-        
-    <a class="category-link" href="/categories/learningNote/">learningNote</a>
-
-
-    
-</div>
-
-            </div>
-            
-                <div class="postShorten-excerpt">
-                    <p>最近读了Goodfellow最初的那篇生成对抗网络的论文。在这里对论文中比较重要的部分记录一下。论文中还有好多自己不同的概念，希望后面自己还可以回来再加以补充。</p>
-                    
-                        <a href="/2019/06/26/gan/" class="postShorten-excerpt_link link">
-                            Continue reading
-                        </a>
-                        
-                    
-                </div>
-            
-        </div>
-        
-            <a href="/2019/06/26/gan/">
-                <div class="postShorten-thumbnailimg">
-                    <img alt="" src="http://czy97.github.io/2019/06/26/gan/cover.png"/>
                 </div>
             </a>
             
