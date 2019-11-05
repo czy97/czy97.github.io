@@ -265,7 +265,7 @@
 <li>在<strong>客户端</strong>，首先会使用<strong>公钥</strong>对签名进行解密，如果解密成功（生成Digest2），说明公钥和私钥是配对的，也就是说发送端就是客户端所期望的服务端。</li>
 <li>然后客户端对收到的报文进行同样的Hash处理生成Digest1，如果Digest1和Digest2完全一致，则说明报文在传输过程中没有被更改过。</li>
 </ol>
-<p><img src="https/signature.jpg" alt="signature"></p>
+<p><img src="/2019/11/04/https/signature.jpg" alt="signature"></p>
 </li>
 <li><p>数字证书（CA, Certificate Authority )</p>
 <p>​        为什么有了签名还需要CA，现在来解释一下。虽然客户端可以通过公钥来验证服务端签名的正确性，但是客户端该怎么保证公钥的正确性呢？比如现在客户端想从服务端A获取一个消息，但是有个攻击者A’冒充A对客户端说我就是A，并把产生的公钥给了客户端。这个时候客户端拿到了A’的公钥，但是客户端认为这个公钥是A的，所以当攻击者A’向客户端发了消息之后，客户端通过公钥验证了签名，便信以为真地认为是A给它发了信息，但其实信息是A’发的。所以说仅仅有数字签名还是有问题的。</p>
@@ -288,14 +288,14 @@
 <li>然后A使用B给的公钥1加密自己的密钥2，并将加密之后的密钥2发给B，B通过私钥1解密得到密钥2，这样A和B就都有密钥2了，而且密钥2在传输的时候是经过加密的，也就是说不会被他人截获</li>
 <li>最后A和B就可以都通过密钥2加密得到密文来进行聊天了</li>
 </ol>
-<p><img src="https/feiduichen.jpg" alt="feiduichen"></p>
+<p><img src="/2019/11/04/https/feiduichen.jpg" alt="feiduichen"></p>
 <p>非对称加密看起来似乎是无懈可击的，但其实还是有破解的办法，假设在A与B进行聊天的时候，有一个中间人Bad Guy想偷听他们的对话，他可以这样做：</p>
 <ol>
 <li>当B把公钥1给A的时候，Bad Guy从中间截获，并将公钥1替换为自己的公钥3给A</li>
 <li>这时候A以为公钥3就是B给的，便用公钥3加密了密钥2发了除去，这是Bad Guy又从中间截获，解密获得密钥2，并将密钥2重新用公钥1加密给B，B收到后也成功解密得到了密钥2，此时B也觉得这个聊天好像没什么问题</li>
 <li>在之后A与B的聊天中，由于都是通过密钥2加密的，这时候三者都有了密钥2，因此Bad Guy可以随意从中间获取A和B的聊天信息</li>
 </ol>
-<p><img src="https/feiduichen_gongji.jpg" alt="feiduichen_gongji"></p>
+<p><img src="/2019/11/04/https/feiduichen_gongji.jpg" alt="feiduichen_gongji"></p>
 </li>
 <li><p>签名和证书</p>
 <p>关于签名和证书在上面已经具体说了，在这里就不分析了</p>
@@ -324,8 +324,7 @@
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/11/05/https-http/" data-tooltip="HTTPS VS HTTP" aria-label="PREVIOUS: HTTPS VS HTTP">
+                    <a class="post-action-btn btn btn--disabled">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
@@ -410,8 +409,7 @@
         <ul class="post-actions post-action-nav">
             <li class="post-action">
                 
-                    
-                    <a class="post-action-btn btn btn--default tooltip--top" href="/2019/11/05/https-http/" data-tooltip="HTTPS VS HTTP" aria-label="PREVIOUS: HTTPS VS HTTP">
+                    <a class="post-action-btn btn btn--disabled">
                 
                     <i class="fa fa-angle-left" aria-hidden="true"></i>
                     <span class="hide-xs hide-sm text-small icon-ml">PREVIOUS</span>
